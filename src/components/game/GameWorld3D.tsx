@@ -12,9 +12,20 @@ import { RoundedBoxGeometry } from "@react-three/drei";
 import * as THREE from "three";
 import { useGameStore } from "@/stores/gameStore";
 import { useUiStore } from "@/stores/uiStore";
+import { useGraphicsStore } from "@/stores/graphicsStore";
+import { getQualityPreset } from "@/lib/graphics/quality";
+import { BloomEffects } from "./effects/BloomEffects";
+import { ParticleField } from "./effects/ParticleField";
 import { getRoom } from "@/lib/game/rooms";
 import { getItem } from "@/lib/game/items";
 import type { RoomId, ItemId, PuzzleId, NpcId } from "@/types/game";
+
+// Objects whose door/dial/hatch animation is tied to a specific puzzle's
+// solved state, rather than just focus/inspection. Keyed by object id.
+const OBJECT_PUZZLE_MAP: Partial<Record<string, PuzzleId>> = {
+  security_safe: "SECURITY_SAFE",
+  escape_pod: "FINAL_ESCAPE_POD",
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const HALF = 7;       // room half-extents (14×14 floor)
@@ -72,9 +83,9 @@ const OBJ_POS: Record<string, [number, number, number, number?]> = {
   // RESEARCH_LAB
   holographic_display:       [ -6.5, 1.0,  -3,  Math.PI / 2],
   workstation_a:             [ -6.49, 0.547, 3,  Math.PI / 2], // x = -HALF + halfDepth so it sits flush touching the wall; y keeps it flush on the floor
-  chemical_cabinet:          [  6.5, 1.5,  -3, -Math.PI / 2],
-  experiment_logs:           [  6.0, 1.236, 6.3, Math.PI], // resting on top of the corner table, rotated 180° to face the room center
-  encrypted_drive_terminal:  [  6.5, 0.9,   2, -Math.PI / 2],
+  chemical_cabinet:          [  6.5, 1.43, -3, -Math.PI / 2], // y = height/2 so it rests flush on the floor
+  experiment_logs:           [  6.0, 1.236, 3.2, -Math.PI / 2], // resting on the long table's north end (near the reading lamp), facing the room center
+  encrypted_drive_terminal:  [  6.0, 1.486, 5.2, -Math.PI / 2], // resting on the long table's south end, next to the notebooks
   // SERVER_ROOM — kept flush against the walls (no exits on the north/east
   // walls) to leave the room's center clear to walk through. server_racks
   // anchors the northwest corner; 3 decorative-only copies (SERVER_RACK_ROW
@@ -96,8 +107,8 @@ const OBJ_POS: Record<string, [number, number, number, number?]> = {
   // so only its front-face image reads, like a mural — centered on the
   // north wall (x=0) and flush against it (z=-7 + halfDepth + tiny gap).
   escape_pod:                [  0,     4,    -6.94],
-  evidence_shredder:         [ -4,   0.9,   3],
-  aria_broadcast:            [  4,   0.9,   2],
+  evidence_shredder:         [ -2,   1.213, 2.5,  Math.PI / 2], // resting on its own (shorter) table, facing +X toward aria_broadcast
+  aria_broadcast:            [  2,   1.213, 2.5, -Math.PI / 2], // resting on its own (shorter) table, facing -X toward evidence_shredder
   aria_upload_portal:        [  3,   1.5,  -5],
 };
 
@@ -116,7 +127,7 @@ const OBJ_SCALE: Record<string, [number, number, number]> = {
   radio:                    [0.3, 0.25, 0.25],
   holographic_display:      [0.8, 1.4,  0.08],
   workstation_a:            [2.552, 1.094, 1.021], // depth (thickness off the wall) reduced 30%
-  chemical_cabinet:         [1.2, 2.2,  0.4],
+  chemical_cabinet:         [1.56, 2.86, 0.52], // 30% bigger than original
   experiment_logs:          [0.4, 0.2,  0.7],
   encrypted_drive_terminal: [0.7, 0.7,  0.5],
   aria_terminal:            [1.0, 1.4,  0.25],
@@ -131,8 +142,8 @@ const OBJ_SCALE: Record<string, [number, number, number]> = {
   emergency_phone:          [0.336,0.336, 0.18], // 20% bigger than original
   master_override:          [0.28,0.28, 0.1],
   escape_pod:               [8.58, 7.41, 0.08], // kept the enlarged width/height, depth shrunk to a thin wall plaque
-  evidence_shredder:        [0.7, 0.9,  0.55],
-  aria_broadcast:           [0.9, 0.7,  0.45],
+  evidence_shredder:        [1.04, 1.04, 0.65], // matched to aria_broadcast, 30% bigger, sits on its table
+  aria_broadcast:           [1.04, 1.04, 0.65], // matched to evidence_shredder, 30% bigger, sits on its table
   aria_upload_portal:       [1.1, 1.4,  0.25],
 };
 
@@ -1125,39 +1136,74 @@ function makeFloorTexture(accentHex: string): THREE.CanvasTexture {
   return tex;
 }
 
+// Base particle counts at densityMultiplier=1 (the "high" tier); every other
+// tier scales down from here. Kept small — this is ambient set-dressing, not
+// a focal effect.
+const ROOM_DUST_BASE_COUNT = 90;
+
 function RoomGeometry({ roomId }: { roomId: RoomId }) {
   const theme = THEME[roomId];
   const floorTex = makeFloorTexture(theme.accent);
   const W = HALF * 2, H = ROOM_H, D = HALF * 2;
+  const quality = useGraphicsStore((s) => s.quality);
+  const preset  = getQualityPreset(quality);
 
   const darkMat  = new THREE.MeshStandardMaterial({ color: "#010101", roughness: 1, metalness: 0 });
   const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, color: "#ffffff", roughness: 0.8, metalness: 0.0, emissive: "#ffffff", emissiveIntensity: 0.15 });
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[W, D]} /><primitive object={floorMat} attach="material" />
       </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, H, 0]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, H, 0]} receiveShadow>
         <planeGeometry args={[W, D]} /><primitive object={darkMat} attach="material" />
       </mesh>
       {([-1, 1] as const).map((side) => (
-        <mesh key={`wz${side}`} rotation={[0, side === -1 ? 0 : Math.PI, 0]} position={[0, H / 2, side * -HALF]}>
+        <mesh key={`wz${side}`} rotation={[0, side === -1 ? 0 : Math.PI, 0]} position={[0, H / 2, side * -HALF]} receiveShadow>
           <planeGeometry args={[W, H]} /><primitive object={darkMat} attach="material" />
         </mesh>
       ))}
       {([-1, 1] as const).map((side) => (
-        <mesh key={`wx${side}`} rotation={[0, side * Math.PI / 2, 0]} position={[side * HALF, H / 2, 0]}>
+        <mesh key={`wx${side}`} rotation={[0, side * Math.PI / 2, 0]} position={[side * HALF, H / 2, 0]} receiveShadow>
           <planeGeometry args={[D, H]} /><primitive object={darkMat} attach="material" />
         </mesh>
       ))}
 
-      {/* Thin accent strip at floor level only — omitted in LOBBY, whose
-          red accent color made this read as an unwanted red light fixture
-          floating in the middle of the room. */}
-      {roomId !== "LOBBY" && (
-        <pointLight position={[0, 0.3, 0]} color={theme.accent} intensity={0.6} distance={18} />
-      )}
+      {/* Overhead key light — the one light per room allowed to cast shadows
+          (point-light shadows use a 6-face cube map each, so only ever have
+          one shadow caster active at a time). Tinted by the room accent so it
+          doubles as a subtle top-down fill reinforcing the palette. Shadow
+          casting itself is gated by the graphics-quality tier; the light
+          still renders (unshadowed) even on "low" so room brightness doesn't
+          jump when the tier changes. */}
+      <spotLight
+        position={[0, H - 0.6, 0]}
+        angle={0.85}
+        penumbra={0.65}
+        intensity={1.3}
+        color={theme.accent}
+        distance={22}
+        decay={2}
+        castShadow={preset.shadows.enabled}
+        shadow-mapSize-width={preset.shadows.mapSize}
+        shadow-mapSize-height={preset.shadows.mapSize}
+        shadow-bias={preset.shadows.bias}
+        shadow-normalBias={preset.shadows.normalBias}
+      />
+
+      {/* Ambient dust motes — subtle, room-wide, density scales with quality tier */}
+      <ParticleField
+        count={Math.round(ROOM_DUST_BASE_COUNT * preset.particles.densityMultiplier)}
+        position={[0, H / 2, 0]}
+        spread={[HALF - 0.5, H / 2 - 0.3, HALF - 0.5]}
+        color={theme.accent}
+        size={0.018}
+        opacity={0.22}
+        riseSpeed={0.12}
+        driftSpeed={0.012}
+      />
+
       <ambientLight intensity={0.04} />
     </group>
   );
@@ -1188,6 +1234,24 @@ function ObjMesh({
   const theme    = THEME[roomId];
   const pos   = overridePos ?? OBJ_POS[objectId];
   const scale = OBJ_SCALE[objectId] ?? [1, 1, 1];
+
+  const quality  = useGraphicsStore((s) => s.quality);
+  const shadowsOn = getQualityPreset(quality).shadows.enabled;
+
+  // Puzzle-solve-gated mechanical animations (safe dial, pod flash). Reads
+  // straight from the game store rather than being threaded down as props,
+  // since Zustand selectors work from any component without prop drilling.
+  const puzzleStates = useGameStore((s) => s.gameState?.puzzleStates);
+  const linkedPuzzle = OBJECT_PUZZLE_MAP[objectId];
+  const isSolved = linkedPuzzle ? puzzleStates?.[linkedPuzzle]?.status === "SOLVED" : false;
+
+  const isSafe   = objectId === "security_safe";
+  const isPod    = objectId === "escape_pod";
+  const isSwitch = objectId === "shutdown_switch";
+  const dialRef        = useRef<THREE.Mesh>(null);
+  const safeHandleRef  = useRef<THREE.Mesh>(null);
+  const switchCoverRef = useRef<THREE.Group>(null);
+
   if (!pos) return null;
 
   // Front face: illustrated schematic canvas texture
@@ -1265,10 +1329,13 @@ function ObjMesh({
     return () => unregisterMesh(objectId);
   }, [objectId, registerMesh, unregisterMesh]);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!meshRef.current) return;
     const mArr = meshRef.current.material as THREE.MeshStandardMaterial[];
-    const targetFront = isFocused ? 3.5 : isInspected ? 0.25 : 0.9;
+    // The escape pod is a flush wall mural rather than real hinged geometry
+    // (see OBJ_SCALE comment), so its "hatch opening" reward is a bright
+    // emissive flash on solve instead of a physical door swinging open.
+    const targetFront = isPod && isSolved ? 6 : isFocused ? 3.5 : isInspected ? 0.25 : 0.9;
     const targetSide  = isFocused ? 0.65 : isInspected ? 0.2  : 0.35;
     // Front face glow
     for (const i of frontIdx) {
@@ -1279,11 +1346,28 @@ function ObjMesh({
       mArr[i].emissiveIntensity = THREE.MathUtils.lerp(mArr[i].emissiveIntensity, targetSide, 0.1);
     }
     if (lightRef.current) lightRef.current.intensity = THREE.MathUtils.lerp(lightRef.current.intensity, isFocused ? 3 : 1, 0.1);
+
+    // Mechanical interaction animations. All use THREE.MathUtils.damp (an
+    // exponential ease toward whatever the current target is) rather than a
+    // fixed-length tween, so they're frame-rate independent and safe to
+    // interrupt mid-motion if the target flips again.
+    if (isSafe) {
+      if (dialRef.current) {
+        dialRef.current.rotation.z = THREE.MathUtils.damp(dialRef.current.rotation.z, isSolved ? Math.PI * 5 : 0, 2, delta);
+      }
+      if (safeHandleRef.current) {
+        safeHandleRef.current.rotation.z = THREE.MathUtils.damp(safeHandleRef.current.rotation.z, isSolved ? Math.PI / 2 : 0, 3, delta);
+      }
+    }
+    if (isSwitch && switchCoverRef.current) {
+      const targetRotX = isFocused ? -2.0 : 0;
+      switchCoverRef.current.rotation.x = THREE.MathUtils.damp(switchCoverRef.current.rotation.x, targetRotX, 6, delta);
+    }
   });
 
   return (
     <group position={[pos[0], pos[1], pos[2]]} rotation={[phoneRotX, pos[3] ?? 0, 0]}>
-      <mesh ref={meshRef} scale={scale}>
+      <mesh ref={meshRef} scale={scale} castShadow={shadowsOn} receiveShadow={shadowsOn}>
         {isRounded ? (
           <RoundedBoxGeometry args={[1, 1, 1]} radius={PC_CORNER_RADIUS} smoothness={4} />
         ) : (
@@ -1306,6 +1390,37 @@ function ObjMesh({
             </mesh>
           </group>
         </>
+      )}
+      {isSafe && (
+        <>
+          {/* Rotary combination dial, mounted proud of the front face — spins
+              several full turns and lands "open" the moment the safe puzzle
+              is solved (see isSolved / OBJECT_PUZZLE_MAP above). */}
+          <mesh ref={dialRef} position={[scale[0] * 0.15, 0, scale[2] / 2 + 0.02]} rotation={[Math.PI / 2, 0, 0]} castShadow={shadowsOn}>
+            <cylinderGeometry args={[0.09, 0.09, 0.03, 20]} />
+            <meshStandardMaterial color="#cfcfcf" roughness={0.25} metalness={0.9} />
+          </mesh>
+          {/* Index notch so the dial's rotation actually reads as motion */}
+          <mesh position={[scale[0] * 0.15, 0.06, scale[2] / 2 + 0.041]}>
+            <boxGeometry args={[0.012, 0.02, 0.005]} />
+            <meshStandardMaterial color="#111111" />
+          </mesh>
+          {/* Handle lever — snaps from horizontal (locked) to vertical (open) */}
+          <mesh ref={safeHandleRef} position={[-scale[0] * 0.2, 0, scale[2] / 2 + 0.03]}>
+            <boxGeometry args={[0.16, 0.03, 0.03]} />
+            <meshStandardMaterial color="#8a8a8a" roughness={0.3} metalness={0.85} />
+          </mesh>
+        </>
+      )}
+      {isSwitch && (
+        <group ref={switchCoverRef} position={[0, scale[1] / 2, scale[2] / 2]}>
+          {/* Hinged protective flap, described in the room text as "a plastic
+              cover" — tilts open on focus/hover as a satisfying micro-interaction. */}
+          <mesh position={[0, -scale[1] / 2, 0.015]} castShadow={shadowsOn}>
+            <boxGeometry args={[scale[0] * 0.95, scale[1] * 0.95, 0.02]} />
+            <meshStandardMaterial color="#aa1111" transparent opacity={0.55} roughness={0.25} metalness={0.1} />
+          </mesh>
+        </group>
       )}
       {/* Object-local point light so it illuminates itself in the dark room */}
       <pointLight ref={lightRef} color={theme.accent} intensity={1} distance={3.5} decay={2} />
@@ -1344,16 +1459,31 @@ function DecorativeServerRack({ roomId, position }: { roomId: RoomId; position: 
   );
 }
 
-// Small corner side table in RESEARCH_LAB — visual-only stand (not raycast-
-// registered) that the "experiment_logs" notebooks object rests on top of.
-// Keep TABLE_LEG_H + TABLE_TOP_H (at the default scale=1.6) in sync with
-// experiment_logs' y in OBJ_POS. Table nudged in from the corner (vs. the
-// original [6.3,0,6.3]) so its 60%-larger footprint still clears the walls
-// (HALF = 7). Also reused (at a smaller scale, no lamp) as the LOBBY coffee
-// table — see LOBBY_COFFEE_TABLE_POS and coffee_machine's y in OBJ_POS.
-const RESEARCH_LAB_TABLE_POS: [number, number, number] = [6.0, 0, 6.3];
+// Long side table against RESEARCH_LAB's east wall — visual-only stand (not
+// raycast-registered) that both "experiment_logs" (notebooks) and
+// "encrypted_drive_terminal" (Data Transfer Station) rest on top of, one at
+// each end. Keep TABLE_LEG_H + TABLE_TOP_H (at the default scale=1.6) in
+// sync with those two objects' y in OBJ_POS. depthScale=3 (3x the base
+// length) stretches only the Z run — the X footprint is unchanged from the
+// original corner table, so it still clears the east wall (HALF = 7) with
+// the same margin. Also reused (at a smaller scale, no lamp, no stretch) as
+// the LOBBY coffee table — see LOBBY_COFFEE_TABLE_POS and coffee_machine's y
+// in OBJ_POS.
+const RESEARCH_LAB_TABLE_POS: [number, number, number] = [6.0, 0, 4.2];
+const RESEARCH_LAB_TABLE_DEPTH_SCALE = 3;
 const LOBBY_COFFEE_TABLE_POS: [number, number, number] = [6.0, 0, 2.7];
 const LOBBY_COFFEE_TABLE_SCALE = 1.0;
+// ESCAPE_ROUTE — one table each for evidence_shredder and aria_broadcast, at
+// their x/z (see OBJ_POS) so the objects just need to sit on top; scale 1.8
+// so the tabletop clears each object's footprint after its facing rotation.
+// heightScale halves the leg height (a lower table); depthScale stretches
+// the Z run 20% wider — keep table-top-height math (legH*heightScale
+// + topH) in sync with the two objects' y in OBJ_POS.
+const ESCAPE_ROUTE_SHREDDER_TABLE_POS: [number, number, number] = [-2, 0, 2.5];
+const ESCAPE_ROUTE_BROADCAST_TABLE_POS: [number, number, number] = [2, 0, 2.5];
+const ESCAPE_ROUTE_TABLE_SCALE = 1.8;
+const ESCAPE_ROUTE_TABLE_DEPTH_SCALE = 1.2;
+const ESCAPE_ROUTE_TABLE_HEIGHT_SCALE = 0.5;
 // Lamp height doubled (100% taller) from its original 0.35 post / 0.22 shade.
 const LAMP_POST_H = 0.35 * 2;
 const LAMP_SHADE_H = 0.22 * 2;
@@ -1361,25 +1491,34 @@ const LAMP_SHADE_Y = 0.22 * 2;
 const LAMP_LIGHT_Y = 0.15 * 2;
 
 function DecorativeTable({
-  roomId, position, scale = 1.6, withLamp = true,
-}: { roomId: RoomId; position: [number, number, number]; scale?: number; withLamp?: boolean }) {
+  roomId, position, scale = 1.6, depthScale = 1, widthScale = 1, heightScale = 1, withLamp = true,
+}: {
+  roomId: RoomId; position: [number, number, number]; scale?: number;
+  depthScale?: number; widthScale?: number; heightScale?: number; withLamp?: boolean;
+}) {
   const theme = THEME[roomId];
   const tex = getMaterialTex('wood_dark');
   const { roughness, metalness } = MAT_PROPS['wood_dark'];
-  const topW = 0.9 * scale, topH = 0.06 * scale, topD = 0.6 * scale, legH = 0.65 * scale;
+  // depthScale/widthScale/heightScale each stretch one dimension (Z run, X
+  // run, leg height) independently of `scale`, which still governs leg
+  // thickness and tabletop thickness uniformly — so a table can be made
+  // longer, wider, or shorter without the other dimensions moving.
+  const topW = 0.9 * scale * widthScale, topH = 0.06 * scale, topD = 0.6 * scale * depthScale, legH = 0.65 * scale * heightScale;
   const legThick = 0.06 * scale;
   const legX = topW / 2 - legThick;
   const legZ = topD / 2 - legThick;
   const legOffsets: [number, number][] = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+  const quality   = useGraphicsStore((s) => s.quality);
+  const shadowsOn = getQualityPreset(quality).shadows.enabled;
 
   return (
     <group position={position}>
-      <mesh position={[0, legH + topH / 2, 0]}>
+      <mesh position={[0, legH + topH / 2, 0]} castShadow={shadowsOn} receiveShadow={shadowsOn}>
         <boxGeometry args={[topW, topH, topD]} />
         <meshStandardMaterial map={tex} color="#6b4a30" roughness={roughness} metalness={metalness} />
       </mesh>
       {legOffsets.map(([sx, sz], i) => (
-        <mesh key={i} position={[sx * legX, legH / 2, sz * legZ]}>
+        <mesh key={i} position={[sx * legX, legH / 2, sz * legZ]} castShadow={shadowsOn} receiveShadow={shadowsOn}>
           <boxGeometry args={[legThick, legH, legThick]} />
           <meshStandardMaterial map={tex} color="#4a3320" roughness={roughness} metalness={metalness} />
         </mesh>
@@ -1421,26 +1560,46 @@ interface ExitDoorProps {
   exitId: string;
   toRoomId: RoomId;
   isLocked: boolean;
+  // True once the player has ever traveled through this exit before (i.e.
+  // its destination room has been visited). Used doors stay lit but stop
+  // blinking, so blinking is reserved for routes the player hasn't taken yet.
+  hasBeenUsed: boolean;
   registerMesh: (id: string, mesh: THREE.Mesh) => void;
   unregisterMesh: (id: string) => void;
 }
 
-function ExitDoor({ position, rotY = 0, accentColor, isFocused, exitId, toRoomId, isLocked, registerMesh, unregisterMesh }: ExitDoorProps) {
+// Access-status light tuning (ExitDoor) — bright enough to read as a clear
+// signal against the room's otherwise dim, moody lighting, and blinking
+// (rather than solid) while accessible so it draws the eye.
+const DOOR_LIGHT_BULB_MAX  = 10;
+const DOOR_LIGHT_POINT_MAX = 8;
+const DOOR_LIGHT_BLINK_HZ  = 1.5;
+
+function ExitDoor({ position, rotY = 0, accentColor, isFocused, exitId, toRoomId, isLocked, hasBeenUsed, registerMesh, unregisterMesh }: ExitDoorProps) {
   const triggerRef = useRef<THREE.Mesh>(null);
   const panelRef   = useRef<THREE.Mesh>(null);
   const leftRef    = useRef<THREE.Mesh>(null);
   const rightRef   = useRef<THREE.Mesh>(null);
   const topRef     = useRef<THREE.Mesh>(null);
+  const statusBulbRef  = useRef<THREE.Mesh>(null);
+  const statusLightRef = useRef<THREE.PointLight>(null);
+  // Smoothed 0-1 "powered on" scalar, separate from the actual displayed
+  // intensity — lets the locked/unlocked transition stay a smooth fade while
+  // the blink layered on top (below) stays a crisp on/off flash instead of
+  // getting blurred out by that same easing.
+  const doorPowerRef = useRef(0);
 
   const destAccent = new THREE.Color(THEME[toRoomId].accent);
   const doorTex    = getDoorTexture(toRoomId, isLocked);
+  const quality    = useGraphicsStore((s) => s.quality);
+  const shadowsOn  = getQualityPreset(quality).shadows.enabled;
 
   useEffect(() => {
     if (triggerRef.current) registerMesh(exitId, triggerRef.current);
     return () => unregisterMesh(exitId);
   }, [exitId, registerMesh, unregisterMesh]);
 
-  useFrame(() => {
+  useFrame((state) => {
     // Frame jambs glow
     const frameTarget = isFocused ? 4 : 1.2;
     [leftRef, rightRef, topRef].forEach((r) => {
@@ -1458,6 +1617,26 @@ function ExitDoor({ position, rotY = 0, accentColor, isFocused, exitId, toRoomId
       for (const i of [0, 1, 2, 3, 5]) {
         mArr[i].emissiveIntensity = THREE.MathUtils.lerp(mArr[i].emissiveIntensity, sideTarget, 0.1);
       }
+    }
+    // Access-status light above the door: blinks once the exit is
+    // accessible, stays fully dark while locked. doorPowerRef smooths the
+    // locked/unlocked transition (so it "powers up" rather than snapping);
+    // blinkOn is a hard square wave layered on top once powered, so the
+    // flash itself stays crisp instead of getting smeared by that easing.
+    // A door the player has already used stays solid (no blink) once
+    // accessible — blinking is reserved for routes not yet taken, so there's
+    // never more than one light competing for the player's attention.
+    doorPowerRef.current = THREE.MathUtils.lerp(doorPowerRef.current, isLocked ? 0 : 1, 0.08);
+    const blinkOn = hasBeenUsed
+      ? 1
+      : Math.sin(state.clock.elapsedTime * DOOR_LIGHT_BLINK_HZ * Math.PI * 2) > 0 ? 1 : 0;
+    const glow = doorPowerRef.current * blinkOn;
+    if (statusBulbRef.current) {
+      const m = statusBulbRef.current.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = glow * DOOR_LIGHT_BULB_MAX;
+    }
+    if (statusLightRef.current) {
+      statusLightRef.current.intensity = glow * DOOR_LIGHT_POINT_MAX;
     }
   });
 
@@ -1492,7 +1671,7 @@ function ExitDoor({ position, rotY = 0, accentColor, isFocused, exitId, toRoomId
       </mesh>
 
       {/* Door panel */}
-      <mesh ref={panelRef} position={[0, DH / 2, 0.04]}>
+      <mesh ref={panelRef} position={[0, DH / 2, 0.04]} castShadow={shadowsOn} receiveShadow={shadowsOn}>
         <boxGeometry args={[DW, DH, 0.1]} />
         <primitive object={panelMats} attach="material" />
       </mesh>
@@ -1509,28 +1688,37 @@ function ExitDoor({ position, rotY = 0, accentColor, isFocused, exitId, toRoomId
       </mesh>
 
       {/* Left jamb */}
-      <mesh ref={leftRef} position={[-(DW / 2 + JW / 2), DH / 2, 0]}>
+      <mesh ref={leftRef} position={[-(DW / 2 + JW / 2), DH / 2, 0]} receiveShadow={shadowsOn}>
         <boxGeometry args={[JW, DH + 0.18, JZ]} />
         {frameMat}
       </mesh>
       {/* Right jamb */}
-      <mesh ref={rightRef} position={[DW / 2 + JW / 2, DH / 2, 0]}>
+      <mesh ref={rightRef} position={[DW / 2 + JW / 2, DH / 2, 0]} receiveShadow={shadowsOn}>
         <boxGeometry args={[JW, DH + 0.18, JZ]} />
         {frameMat}
       </mesh>
       {/* Top lintel */}
-      <mesh ref={topRef} position={[0, DH + 0.09, 0]}>
+      <mesh ref={topRef} position={[0, DH + 0.09, 0]} receiveShadow={shadowsOn}>
         <boxGeometry args={[DW + JW * 2, 0.18, JZ]} />
         {frameMat}
       </mesh>
       {/* Floor threshold strip */}
-      <mesh position={[0, 0.03, 0]}>
+      <mesh position={[0, 0.03, 0]} receiveShadow={shadowsOn}>
         <boxGeometry args={[DW + JW * 2, 0.06, JZ]} />
         <meshStandardMaterial color="#000000" emissive={destAccent} emissiveIntensity={0.7} roughness={0.3} metalness={0.8} />
       </mesh>
 
-      {/* Door glow */}
-      <pointLight position={[0, DH / 2, 0.5]} color={THEME[toRoomId].accent} intensity={isFocused ? 3.5 : 1.2} distance={6} decay={2} />
+      {/* Access-status light — mounted above the lintel. Fully lit when this
+          exit is accessible, dark when locked (see bulbTarget in useFrame). */}
+      <mesh position={[0, DH + 0.28, 0]}>
+        <boxGeometry args={[0.22, 0.06, 0.08]} />
+        <meshStandardMaterial color="#111111" roughness={0.4} metalness={0.6} />
+      </mesh>
+      <mesh ref={statusBulbRef} position={[0, DH + 0.28, 0.05]}>
+        <sphereGeometry args={[0.084375, 12, 12]} />
+        <meshStandardMaterial color="#101010" emissive={destAccent} emissiveIntensity={0} roughness={0.3} metalness={0.2} />
+      </mesh>
+      <pointLight ref={statusLightRef} position={[0, DH + 0.28, 0.05]} color={THEME[toRoomId].accent} intensity={0} distance={5} decay={2} />
     </group>
   );
 }
@@ -1778,6 +1966,12 @@ function Scene({ roomId, inspectedObjects, isLocked, exitLockStatus, focusedIdRe
   const theme = THEME[roomId];
   const room = getRoom(roomId);
   const exits = EXIT_LAYOUT[roomId] ?? [];
+  // A door stops blinking for good once its destination has ever been
+  // visited — reading straight from visitedRooms (rather than only
+  // remembering the immediately-previous room) so it also covers rooms
+  // visited two+ moves ago, not just a one-step "where did I just come from."
+  const visitedRooms = useGameStore((s) => s.gameState?.visitedRooms);
+  const particlePreset = getQualityPreset(useGraphicsStore((s) => s.quality)).particles;
 
   const registerMesh   = useCallback((id: string, mesh: THREE.Mesh) => { meshMapRef.current.set(id, mesh); }, [meshMapRef]);
   const unregisterMesh = useCallback((id: string) => { meshMapRef.current.delete(id); }, [meshMapRef]);
@@ -1840,9 +2034,30 @@ function Scene({ roomId, inspectedObjects, isLocked, exitLockStatus, focusedIdRe
       ))}
 
       {/* Corner side table — "experiment_logs" (Physical Lab Notebooks) rests on top of it */}
-      {roomId === "RESEARCH_LAB" && <DecorativeTable roomId={roomId} position={RESEARCH_LAB_TABLE_POS} />}
+      {roomId === "RESEARCH_LAB" && <DecorativeTable roomId={roomId} position={RESEARCH_LAB_TABLE_POS} depthScale={RESEARCH_LAB_TABLE_DEPTH_SCALE} />}
       {/* Coffee table — "coffee_machine" rests on top of it, next to the vending machine */}
       {roomId === "LOBBY" && <DecorativeTable roomId={roomId} position={LOBBY_COFFEE_TABLE_POS} scale={LOBBY_COFFEE_TABLE_SCALE} withLamp={false} />}
+      {/* Two matching tables — one under evidence_shredder, one under aria_broadcast */}
+      {roomId === "ESCAPE_ROUTE" && (
+        <>
+          <DecorativeTable roomId={roomId} position={ESCAPE_ROUTE_SHREDDER_TABLE_POS} scale={ESCAPE_ROUTE_TABLE_SCALE} depthScale={ESCAPE_ROUTE_TABLE_DEPTH_SCALE} heightScale={ESCAPE_ROUTE_TABLE_HEIGHT_SCALE} withLamp={false} />
+          <DecorativeTable roomId={roomId} position={ESCAPE_ROUTE_BROADCAST_TABLE_POS} scale={ESCAPE_ROUTE_TABLE_SCALE} depthScale={ESCAPE_ROUTE_TABLE_DEPTH_SCALE} heightScale={ESCAPE_ROUTE_TABLE_HEIGHT_SCALE} withLamp={false} />
+        </>
+      )}
+      {/* Coffee machine steam — reuses the same ParticleField as the ambient
+          dust, just narrower, faster-rising, and anchored above the machine. */}
+      {roomId === "LOBBY" && (
+        <ParticleField
+          count={Math.round(28 * particlePreset.densityMultiplier)}
+          position={[OBJ_POS.coffee_machine[0], OBJ_POS.coffee_machine[1] + 0.75, OBJ_POS.coffee_machine[2]]}
+          spread={[0.12, 0.45, 0.12]}
+          color="#e8ecf1"
+          size={0.025}
+          opacity={0.28}
+          riseSpeed={0.35}
+          driftSpeed={0.05}
+        />
+      )}
 
       {/* Exit doors */}
       {exits.map((exit) => (
@@ -1854,6 +2069,7 @@ function Scene({ roomId, inspectedObjects, isLocked, exitLockStatus, focusedIdRe
           label={exit.label}
           accentColor={theme.accent}
           toRoomId={exit.to}
+          hasBeenUsed={visitedRooms?.[exit.to]?.isVisited ?? false}
           isLocked={exitLockStatus[`exit-${exit.to}`] ?? false}
           isFocused={focused === `exit-${exit.to}`}
           focusedIdRef={focusedIdRef}
@@ -1900,6 +2116,9 @@ export function GameWorld3D() {
   const meshMapRef        = useRef<Map<string, THREE.Mesh>>(new Map());
   const lockCooldown      = useRef(false);
   const prevActiveModal   = useRef(activeModal);
+
+  const graphicsQuality = useGraphicsStore((s) => s.quality);
+  const shadowsEnabled  = getQualityPreset(graphicsQuality).shadows.enabled;
 
   // Listen for native pointer lock changes; enforce 1s cooldown after release
   useEffect(() => {
@@ -2124,6 +2343,7 @@ export function GameWorld3D() {
       <Canvas
         camera={{ fov: 80, near: 0.1, far: 60, position: [0, PLAYER_H, 5] }}
         gl={{ antialias: true }}
+        shadows={shadowsEnabled}
         onCreated={({ gl }) => { gl.setPixelRatio(Math.min(window.devicePixelRatio, 2)); }}
         onPointerDown={() => { if (!isLocked) lockPointer(); }}
       >
@@ -2139,6 +2359,7 @@ export function GameWorld3D() {
           marcusStopped={marcusStopped}
           marcusStopPosition={marcusStopPosition}
         />
+        <BloomEffects />
       </Canvas>
 
       {/* ── HTML overlays ── */}

@@ -523,9 +523,9 @@ export const ROOMS: Record<RoomId, RoomDefinition> = {
         to: "SERVER_ROOM",
         label: "Server Room",
         isLocked: true,
-        requiresItem: "LAB_KEYCARD",
+        requiresPuzzleSolved: "LAB_DATA_DECRYPTION",
         lockedMessage:
-          "The server room requires a laboratory keycard with Level 4 clearance.",
+          "The server room's access panel is dead. Whatever's beyond it, you need to know what you're walking into first — decrypt the data on the transfer station.",
       },
     ],
   },

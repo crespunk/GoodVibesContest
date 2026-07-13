@@ -11,6 +11,7 @@ import { Inventory } from "./Inventory";
 import { Typewriter } from "./Typewriter";
 import { HintPanel } from "./HintPanel";
 import { EndingScreen } from "./EndingScreen";
+import { useGraphicsStore, type GraphicsQuality } from "@/stores/graphicsStore";
 import type { NpcId, PuzzleId, ItemId, RoomId } from "@/types/game";
 import { getNpc } from "@/lib/game/npcs";
 import { getPuzzle, PUZZLES } from "@/lib/game/puzzles";
@@ -148,6 +149,18 @@ export function ModalController() {
           title="Save Game"
         >
           <SavePanel />
+        </Modal>
+      )}
+
+      {/* Graphics Settings Panel */}
+      {activePanel === "settings" && (
+        <Modal
+          isOpen
+          onClose={() => togglePanel("settings")}
+          size="sm"
+          title="Graphics Quality"
+        >
+          <GraphicsSettingsPanel />
         </Modal>
       )}
     </>
@@ -325,6 +338,44 @@ function SavePanel() {
           <span className="text-slate-600 ml-2 text-xs">— Click to save here</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+const QUALITY_OPTIONS: { value: GraphicsQuality; label: string; description: string }[] = [
+  { value: "low", label: "Low", description: "No bloom, no shadows, minimal particles. Best performance." },
+  { value: "medium", label: "Medium", description: "Subtle bloom, limited shadows, moderate particles." },
+  { value: "high", label: "High", description: "Full bloom, full shadows, maximum particles." },
+];
+
+function GraphicsSettingsPanel() {
+  const { quality, setQuality } = useGraphicsStore();
+
+  return (
+    <div className="space-y-3">
+      {QUALITY_OPTIONS.map((opt) => {
+        const active = quality === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => setQuality(opt.value)}
+            className={`w-full px-4 py-3 border rounded text-left text-sm transition-colors
+              ${active
+                ? "bg-cyan-900/40 border-cyan-600/60 text-cyan-200"
+                : "bg-slate-800/60 hover:bg-slate-700/60 border-slate-700/50 hover:border-slate-600/50 text-slate-300"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{opt.label}</span>
+              {active && <span className="text-cyan-400 text-xs">✓ Active</span>}
+            </div>
+            <p className="text-slate-500 text-xs mt-1">{opt.description}</p>
+          </button>
+        );
+      })}
+      <p className="text-slate-600 text-xs text-center pt-1">
+        Takes effect immediately. Your choice is remembered on this device.
+      </p>
     </div>
   );
 }

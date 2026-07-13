@@ -206,6 +206,12 @@ export function GameHUD() {
           onClick={() => togglePanel("save")}
         />
         <SidebarButton
+          icon="⚙️"
+          label="Graphics"
+          active={activePanel === "settings"}
+          onClick={() => togglePanel("settings")}
+        />
+        <SidebarButton
           icon="🔔"
           label="Alerts"
           active={activePanel === "notifications"}
