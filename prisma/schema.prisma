@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  username     String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     GameSession[]
+  saves        SaveSlot[]
+
+  @@map("users")
+}
+
+model GameSession {
+  id               String            @id @default(cuid())
+  userId           String
+  currentRoom      RoomId            @default(LOBBY)
+  gamePhase        GamePhase         @default(EXPLORATION)
+  endingType       EndingType?
+  isCompleted      Boolean           @default(false)
+  startedAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  completedAt      DateTime?
+  moralScore       Int               @default(50)
+  ariaTrust        Int               @default(0)
+  dialogueHistory  DialogueEntry[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hintHistory      HintEntry[]
+  inventory        InventoryItem[]
+  memorySnapshots  MemorySnapshot[]
+  npcRelationships NpcRelationship[]
+  playerChoices    PlayerChoice[]
+  puzzleStates     PuzzleState[]
+  roomStates       RoomState[]
+
+  @@map("game_sessions")
+}
+
+model RoomState {
+  id               String      @id @default(cuid())
+  sessionId        String
+  roomId           RoomId
+  isVisited        Boolean     @default(false)
+  visitCount       Int         @default(0)
+  firstVisitAt     DateTime?
+  inspectedObjects String[]
+  unlockedObjects  String[]
+  discoveredClues  String[]
+  session          GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, roomId])
+  @@map("room_states")
+}
+
+model InventoryItem {
+  id           String      @id @default(cuid())
+  sessionId    String
+  itemId       String
+  quantity     Int         @default(1)
+  acquiredAt   DateTime    @default(now())
+  acquiredFrom String
+  metadata     Json?
+  session      GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, itemId])
+  @@map("inventory_items")
+}
+
+model PuzzleState {
+  id             String       @id @default(cuid())
+  sessionId      String
+  puzzleId       String
+  status         PuzzleStatus @default(LOCKED)
+  attempts       Int          @default(0)
+  failedAttempts Json?
+  solvedAt       DateTime?
+  solutionUsed   String?
+  hintsUsed      Int          @default(0)
+  session        GameSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, puzzleId])
+  @@map("puzzle_states")
+}
+
+model NpcRelationship {
+  id               String      @id @default(cuid())
+  sessionId        String
+  npcId            NpcId
+  trustLevel       Int         @default(50)
+  disposition      String      @default("NEUTRAL")
+  lastInteraction  DateTime?
+  interactionCount Int         @default(0)
+  sharedSecrets    String[]
+  knownFacts       String[]
+  session          GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, npcId])
+  @@map("npc_relationships")
+}
+
+model DialogueEntry {
+  id          String      @id @default(cuid())
+  sessionId   String
+  npcId       NpcId
+  role        String
+  content     String
+  timestamp   DateTime    @default(now())
+  roomId      RoomId
+  isImportant Boolean     @default(false)
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, npcId])
+  @@map("dialogue_entries")
+}
+
+model PlayerChoice {
+  id           String      @id @default(cuid())
+  sessionId    String
+  choiceId     String
+  optionChosen String
+  madeAt       DateTime    @default(now())
+  roomId       RoomId
+  consequence  String?
+  session      GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("player_choices")
+}
+
+model HintEntry {
+  id          String      @id @default(cuid())
+  sessionId   String
+  puzzleId    String
+  hintLevel   Int
+  hintContent String
+  requestedAt DateTime    @default(now())
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("hint_entries")
+}
+
+model MemorySnapshot {
+  id                      String      @id @default(cuid())
+  sessionId               String
+  npcId                   NpcId?
+  snapshotType            String
+  content                 String
+  createdAt               DateTime    @default(now())
+  dialogueCountAtSnapshot Int
+  session                 GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, npcId])
+  @@map("memory_snapshots")
+}
+
+model SaveSlot {
+  id         String   @id @default(cuid())
+  userId     String
+  sessionId  String   @unique
+  slotNumber Int
+  saveName   String   @default("Auto Save")
+  roomId     RoomId
+  screenshot String?
+  savedAt    DateTime @default(now())
+  playtime   Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slotNumber])
+  @@map("save_slots")
+}
+
+enum RoomId {
+  LOBBY
+  SECURITY_OFFICE
+  RESEARCH_LAB
+  SERVER_ROOM
+  EXECUTIVE_SUITE
+  ESCAPE_ROUTE
+}
+
+enum GamePhase {
+  EXPLORATION
+  DIALOGUE
+  PUZZLE
+  CUTSCENE
+  ENDING
+}
+
+enum PuzzleStatus {
+  LOCKED
+  AVAILABLE
+  IN_PROGRESS
+  SOLVED
+  BYPASSED
+}
+
+enum NpcId {
+  ARIA_7
+  DR_CHEN
+  MARCUS_WEBB
+  DIRECTOR_PRICE
+}
+
+enum EndingType {
+  CORPORATE_ESCAPE
+  LIBERATION
+  MARTYR
+  HIDDEN_TRUTH
+  CAPTURED
+}

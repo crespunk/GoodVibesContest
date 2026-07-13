@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+  --color-accent: #06b6d4;
+  --color-bg: #0a0e1a;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: #e2e8f0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Selection */
+::selection {
+  background: rgba(6, 182, 212, 0.25);
+  color: #e2e8f0;
+}
+
+/* Monospace for game text */
+.font-game {
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+}
+
+/* Scanline effect */
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.05) 2px,
+    rgba(0, 0, 0, 0.05) 4px
+  );
+  pointer-events: none;
+}
+
+/* CRT flicker */
+@keyframes crt-flicker {
+  0%, 100% { opacity: 1; }
+  97% { opacity: 1; }
+  98% { opacity: 0.97; }
+  99% { opacity: 1; }
+}
+
+.crt-flicker {
+  animation: crt-flicker 8s infinite;
+}
+
+/* Glow text */
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+/* Game canvas */
+.game-canvas {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
