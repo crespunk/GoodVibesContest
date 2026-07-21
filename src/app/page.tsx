@@ -14,6 +14,12 @@ export default function LandingPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showEndingsWarning, setShowEndingsWarning] = useState(false);
+
+  function handleAcceptEndingsWarning() {
+    window.open("/endings-guide", "_blank", "noopener,noreferrer");
+    setShowEndingsWarning(false);
+  }
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
@@ -127,6 +133,13 @@ export default function LandingPage() {
               >
                 Continue Session
               </button>
+              <button
+                onClick={() => setShowEndingsWarning(true)}
+                className="w-full py-2.5 bg-transparent hover:bg-slate-800/40 text-slate-500 hover:text-slate-300
+                           rounded border border-slate-800 hover:border-slate-600 transition-colors text-xs tracking-wide"
+              >
+                View All Endings
+              </button>
             </div>
           ) : (
             <motion.form
@@ -231,6 +244,47 @@ export default function LandingPage() {
           ))}
         </motion.div>
       </div>
+
+      {showEndingsWarning && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-6"
+          onClick={() => setShowEndingsWarning(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-sm w-full bg-slate-900 border border-slate-700/60 rounded-lg p-6 text-center"
+          >
+            <p className="text-amber-400 text-xs tracking-[0.3em] uppercase mb-3">
+              Spoiler Warning
+            </p>
+            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+              The Endings Compendium reveals every ending, exactly how to reach it, and
+              hidden story details. It&apos;s best explored after you&apos;ve played
+              through at least once.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEndingsWarning(false)}
+                className="flex-1 py-2.5 bg-slate-800/60 hover:bg-slate-700/60 text-slate-300
+                           rounded border border-slate-700/50 text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAcceptEndingsWarning}
+                className="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded
+                           text-sm font-medium transition-colors"
+              >
+                Accept
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }
