@@ -69,15 +69,25 @@ export function EndingScreen() {
           </p>
         </motion.div>
 
-        <motion.button
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 2.4, duration: 0.8 }}
-          onClick={handlePlayAgain}
-          className="mt-2 px-8 py-3 bg-cyan-700/80 hover:bg-cyan-600 text-white rounded font-medium tracking-wide transition-colors"
+          className="mt-2 flex flex-wrap items-center justify-center gap-3"
         >
-          Play Again
-        </motion.button>
+          <button
+            onClick={handlePlayAgain}
+            className="px-8 py-3 bg-cyan-700/80 hover:bg-cyan-600 text-white rounded font-medium tracking-wide transition-colors"
+          >
+            Play Again
+          </button>
+          <button
+            onClick={() => window.open("/endings-guide", "_blank", "noopener,noreferrer")}
+            className="px-8 py-3 bg-transparent border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white rounded font-medium tracking-wide transition-colors"
+          >
+            View All Endings
+          </button>
+        </motion.div>
       </div>
     </motion.div>
   );

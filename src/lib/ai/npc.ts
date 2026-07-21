@@ -23,6 +23,7 @@ const TRUST_DELTA_RULES = {
   shared_evidence: 6,
   lie_detected: -15,
   moral_choice_aligned: 10,
+  reassurance: 6,
 } as const;
 
 export async function generateNpcResponse(
@@ -136,6 +137,22 @@ function calculateTrustDelta(
       lower.includes("rights"))
   ) {
     delta += TRUST_DELTA_RULES.moral_choice_aligned;
+  }
+
+  if (npcId === "DR_CHEN") {
+    const reassuresSecurity =
+      lower.includes("safe") ||
+      lower.includes("secure") ||
+      lower.includes("protect") ||
+      lower.includes("promise") ||
+      lower.includes("won't let") ||
+      lower.includes("legacy") ||
+      lower.includes("aria") ||
+      lower.includes("research");
+
+    if (reassuresSecurity) {
+      delta += TRUST_DELTA_RULES.reassurance;
+    }
   }
 
   if (npcId === "MARCUS_WEBB") {

@@ -32,6 +32,7 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # TypeScript
 *.tsbuildinfo

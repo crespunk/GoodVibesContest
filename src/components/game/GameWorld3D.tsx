@@ -6,9 +6,10 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  Suspense,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { RoundedBoxGeometry } from "@react-three/drei";
+import { RoundedBoxGeometry, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { useGameStore } from "@/stores/gameStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -100,7 +101,7 @@ const OBJ_POS: Record<string, [number, number, number, number?]> = {
   art_piece:                 [ -6.5, 1.8,   1,  Math.PI / 2],
   hidden_safe:               [ -6.5, 1.8,   1,  Math.PI / 2],
   private_terminal:          [  6.65, 0.75, -4, -Math.PI / 2], // flush against east wall, clear of walking path
-  emergency_phone:           [  1.15, 1.32,  2.35, Math.PI], // resting on top of ceo_desk
+  emergency_phone:           [  0,    1.4,   2,    Math.PI], // centered on ceo_desk (matches its x/z exactly) — y re-tuned for the real desk.glb top surface (base 0.35 + RECEPTION_DESK_TOP_Y 0.884 ≈ 1.234), keeping the same ~0.17 clearance above the desk top as before the model swap
   master_override:           [  3,   1.5,   5],
   // ESCAPE_ROUTE
   // escape_pod flattened to a near-flush plaque (see OBJ_SCALE depth 0.08)
@@ -119,7 +120,7 @@ const OBJ_SCALE: Record<string, [number, number, number]> = {
   coffee_machine:           [0.6, 1.1,  0.5],
   emergency_board:          [1.3, 0.85, 0.07],
   vending_machine:          [1.04, 2.34, 0.78], // 30% bigger than original
-  marcus_pc:                [1.0, 0.9,  0.55],
+  marcus_pc:                [1.2, 0.6,  1.2], // sized to cover the drone model's actual (wide, flat) footprint at MARCUS_ROBOT_SCALE
   security_console:         [2.5, 0.7,  1.0],
   security_safe:            [0.7, 0.7,  0.4],
   filing_cabinet:           [0.7, 1.8,  0.5],
@@ -146,6 +147,404 @@ const OBJ_SCALE: Record<string, [number, number, number]> = {
   aria_broadcast:           [1.04, 1.04, 0.65], // matched to evidence_shredder, 30% bigger, sits on its table
   aria_upload_portal:       [1.1, 1.4,  0.25],
 };
+
+// Reception desk — real CC0 furniture models (Kenney "Furniture Kit", public
+// domain; see public/models/furniture/LICENSE.txt) standing in for what used
+// to be a flat textured box. ObjMesh keeps the original OBJ_POS/OBJ_SCALE box
+// as an invisible raycasting hitbox (unchanged interaction/focus behavior);
+// these models are purely the visual layer on top of it.
+const RECEPTION_DESK_URL      = "/models/furniture/desk.glb";
+const RECEPTION_MONITOR_URL   = "/models/furniture/computerScreen.glb";
+const RECEPTION_KEYBOARD_URL  = "/models/furniture/computerKeyboard.glb";
+const RECEPTION_MOUSE_URL     = "/models/furniture/computerMouse.glb";
+const RECEPTION_DESK_SCALE     = 2.3;
+// Width (X) only, 25% wider than the uniform scale — depth/height untouched.
+const RECEPTION_DESK_SCALE_XYZ: [number, number, number] = [RECEPTION_DESK_SCALE * 1.25, RECEPTION_DESK_SCALE, RECEPTION_DESK_SCALE];
+const RECEPTION_MONITOR_SCALE  = 1.3 * 1.2; // +20%
+const RECEPTION_KEYBOARD_SCALE = 1.3;
+const RECEPTION_MOUSE_SCALE    = 1.3;
+// desk.glb's native (unscaled) height, measured from its GLTF accessor
+// bounds — used to rest the monitor/keyboard/mouse on its actual top surface.
+const RECEPTION_DESK_NATIVE_H = 0.3844;
+const RECEPTION_DESK_TOP_Y = RECEPTION_DESK_NATIVE_H * RECEPTION_DESK_SCALE;
+const RECEPTION_MONITOR_POS: [number, number, number]  = [0,     RECEPTION_DESK_TOP_Y, -0.18];
+const RECEPTION_KEYBOARD_POS: [number, number, number] = [0,     RECEPTION_DESK_TOP_Y,  0.18];
+const RECEPTION_MOUSE_POS: [number, number, number]    = [0.22,  RECEPTION_DESK_TOP_Y,  0.18];
+
+// Loads a GLTF model, clones it (so multiple instances don't share transforms),
+// and recenters it on X/Z with its base sitting at local y=0 — so callers can
+// position/scale/rotate it like any primitive without hand-tuning per-model
+// pivot offsets.
+function GltfProp({
+  url, scale = 1, position = [0, 0, 0], rotationY = 0, shadowsOn, autoCenter = true, manualOffset,
+}: {
+  url: string;
+  scale?: number | [number, number, number];
+  position?: [number, number, number];
+  rotationY?: number;
+  shadowsOn: boolean;
+  // Box3.setFromObject reads each mesh's *unposed* local geometry — for a
+  // static prop that's the same as its rendered shape, but for a rigged/
+  // skinned model (like the Marcus PC robot) it can be wildly wrong, since
+  // the actual on-screen silhouette only exists after the skeleton's bone
+  // transforms are applied. Skinned models should pass autoCenter={false}
+  // and a manually-tuned manualOffset instead.
+  autoCenter?: boolean;
+  manualOffset?: [number, number, number];
+}) {
+  const { scene } = useGLTF(url);
+  const cloned = useMemo(() => scene.clone(true), [scene]);
+  const offset = useMemo(() => {
+    if (!autoCenter) return manualOffset ?? [0, 0, 0];
+    const box = new THREE.Box3().setFromObject(cloned);
+    const center = box.getCenter(new THREE.Vector3());
+    return [-center.x, -box.min.y, -center.z] as [number, number, number];
+  }, [cloned, autoCenter, manualOffset]);
+
+  useEffect(() => {
+    cloned.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = shadowsOn;
+        mesh.receiveShadow = shadowsOn;
+        // Several of these downloaded models (the safe especially) come in
+        // near-mirror-metallic — under this scene's single small per-object
+        // point light (everything else is near-black), a high-metalness/
+        // low-roughness surface only catches a couple of sharp specular
+        // glints and reads as an almost-invisible black silhouette
+        // otherwise. Clamping both gives the surface a real diffuse
+        // response so the point light actually lights it up.
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat && "metalness" in mat) {
+          mat.metalness = Math.min(mat.metalness, 0.5);
+          mat.roughness = Math.max(mat.roughness, 0.45);
+        }
+        // Skinned meshes (the Marcus PC robot) often carry a bounding
+        // sphere/box computed from their *unposed* reference geometry —
+        // three.js uses that stale bound for frustum culling instead of the
+        // actual skinned/posed silhouette, so depending on where the object
+        // sits relative to the camera it can get wrongly culled and vanish
+        // entirely even though it's well within view. Skip frustum culling
+        // for skinned meshes so they're always drawn.
+        if ((mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) {
+          mesh.frustumCulled = false;
+        }
+      }
+    });
+  }, [cloned, shadowsOn]);
+
+  return (
+    <group position={position} rotation={[0, rotationY, 0]} scale={scale}>
+      <primitive object={cloned} position={offset} />
+    </group>
+  );
+}
+
+function ReceptionDeskModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return (
+    <>
+      <GltfProp url={RECEPTION_DESK_URL} scale={RECEPTION_DESK_SCALE_XYZ} shadowsOn={shadowsOn} />
+      <GltfProp url={RECEPTION_MONITOR_URL} scale={RECEPTION_MONITOR_SCALE} rotationY={0} position={RECEPTION_MONITOR_POS} shadowsOn={shadowsOn} />
+      <GltfProp url={RECEPTION_KEYBOARD_URL} scale={RECEPTION_KEYBOARD_SCALE} position={RECEPTION_KEYBOARD_POS} shadowsOn={shadowsOn} />
+      <GltfProp url={RECEPTION_MOUSE_URL} scale={RECEPTION_MOUSE_SCALE} position={RECEPTION_MOUSE_POS} shadowsOn={shadowsOn} />
+    </>
+  );
+}
+
+useGLTF.preload(RECEPTION_DESK_URL);
+useGLTF.preload(RECEPTION_MONITOR_URL);
+useGLTF.preload(RECEPTION_KEYBOARD_URL);
+useGLTF.preload(RECEPTION_MOUSE_URL);
+
+// Security console — same desk model as the reception desk, scaled down to
+// fit this object's shorter/narrower hitbox (OBJ_SCALE [2.5, 0.7, 1.0] vs
+// reception's [3.2, 0.9, 1.4]), with three monitors lined up across it
+// instead of one — matching the "3 monitors" the old flat texture drew.
+const SECURITY_DESK_SCALE_XYZ: [number, number, number] = [2.9, 1.8, 1.8];
+const SECURITY_DESK_TOP_Y = RECEPTION_DESK_NATIVE_H * SECURITY_DESK_SCALE_XYZ[1];
+const SECURITY_MONITOR_SCALE = 1.15;
+const SECURITY_KEYBOARD_SCALE = 1.2;
+const SECURITY_MONITOR_X_OFFSETS = [-0.62, 0, 0.62];
+
+// Desk chair — same Kenney "Furniture Kit" pack, pulled up to the console's
+// front edge (the +z side, where the keyboard sits) and centered on the
+// middle monitor, facing back into the desk.
+const SECURITY_CHAIR_URL = "/models/furniture/chairDesk.glb";
+const SECURITY_CHAIR_SCALE = 1.5;
+const SECURITY_CHAIR_POS: [number, number, number] = [0, 0, 0.85];
+const SECURITY_CHAIR_ROTATION_Y = Math.PI;
+
+function SecurityConsoleModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return (
+    <>
+      <GltfProp url={RECEPTION_DESK_URL} scale={SECURITY_DESK_SCALE_XYZ} shadowsOn={shadowsOn} />
+      {SECURITY_MONITOR_X_OFFSETS.map((x) => (
+        <GltfProp
+          key={x}
+          url={RECEPTION_MONITOR_URL}
+          scale={SECURITY_MONITOR_SCALE}
+          position={[x, SECURITY_DESK_TOP_Y, -0.15]}
+          shadowsOn={shadowsOn}
+        />
+      ))}
+      <GltfProp
+        url={RECEPTION_KEYBOARD_URL}
+        scale={SECURITY_KEYBOARD_SCALE}
+        position={[0, SECURITY_DESK_TOP_Y, 0.2]}
+        shadowsOn={shadowsOn}
+      />
+      <GltfProp
+        url={SECURITY_CHAIR_URL}
+        scale={SECURITY_CHAIR_SCALE}
+        position={SECURITY_CHAIR_POS}
+        rotationY={SECURITY_CHAIR_ROTATION_Y}
+        shadowsOn={shadowsOn}
+      />
+    </>
+  );
+}
+
+useGLTF.preload(SECURITY_CHAIR_URL);
+
+// Director's desk (EXECUTIVE_SUITE's "ceo_desk") — same real desk.glb model
+// as the reception desk (only the desk itself, no monitor/keyboard/mouse —
+// the emergency_phone stays a separate object, positioned on top of it via
+// its own OBJ_POS entry). See ReceptionDeskModel / usesRealModel in ObjMesh.
+function CeoDeskModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return <GltfProp url={RECEPTION_DESK_URL} scale={RECEPTION_DESK_SCALE_XYZ} shadowsOn={shadowsOn} />;
+}
+
+// Coffee machine — same real-CC0-model swap as the reception desk (Kenney
+// "Furniture Kit", public domain), replacing the flat textured box that sits
+// on the LOBBY coffee table. See CoffeeMachineModel / usesRealModel in ObjMesh.
+const COFFEE_MACHINE_URL = "/models/furniture/kitchenCoffeeMachine.glb";
+const COFFEE_MACHINE_SCALE = 3.0; // 100% bigger
+// kitchenCoffeeMachine.glb's native (unscaled) height, measured from its
+// GLTF accessor bounds — used to aim the steam particles at its actual top
+// (see the ParticleField anchored on coffee_machine in Scene) instead of
+// the old box's now-unrelated height.
+const COFFEE_MACHINE_NATIVE_H = 0.3034;
+const COFFEE_MACHINE_TOP_Y = COFFEE_MACHINE_NATIVE_H * COFFEE_MACHINE_SCALE;
+
+function CoffeeMachineModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return <GltfProp url={COFFEE_MACHINE_URL} scale={COFFEE_MACHINE_SCALE} shadowsOn={shadowsOn} />;
+}
+
+useGLTF.preload(COFFEE_MACHINE_URL);
+
+// Elevator — same real-CC0-model swap, this time a sliding sci-fi door
+// (Kenney "Space Station Kit", public domain) standing in for the flat
+// wall-mounted mural box. At this scale its natural width/depth (1.8/0.3)
+// land almost exactly on the original box's OBJ_SCALE — only the height
+// shrinks, from a floor-to-half-ceiling mural down to an actual door height.
+const ELEVATOR_DOOR_URL = "/models/furniture/elevatorDoor.glb";
+const ELEVATOR_DOOR_SCALE = 3.0 * 1.4; // 40% bigger
+
+// door.glb's native (unscaled) width/height, measured from its GLTF accessor
+// bounds — used to size and place the call-button panel proportionally to
+// whatever ELEVATOR_DOOR_SCALE currently is, instead of hardcoded constants
+// that would go stale if the door is resized again.
+const ELEVATOR_DOOR_NATIVE_W = 0.6;
+const ELEVATOR_DOOR_NATIVE_H = 0.7;
+
+// Classic up/down call buttons mounted on the wall beside the door — a small
+// backing plate with two round, glowing, slightly-proud buttons, matching
+// how this file builds other tactile details (the safe's dial, the switch's
+// cover) out of primitives rather than a flat texture.
+//
+// Each button is two meshes: a plain cylinder (rotated so it protrudes along
+// +z) for the 3D puck body, plus a circleGeometry disc — which lies in the
+// XY plane by construction, needing no rotation — for the glowing ▲/▼ face.
+// (An earlier version put the texture on the cylinder's own end cap, but a
+// rotated cylinder cap's UVs don't line up with world up/down, so the arrow
+// glyphs came out rotated 90°; the flat disc's UVs map straight to local
+// X/Y with no such twist.)
+function ElevatorCallPanel({ shadowsOn, accentColor }: { shadowsOn: boolean; accentColor: string }) {
+  const accent = useMemo(() => new THREE.Color(accentColor), [accentColor]);
+  const plateTex = useMemo(() => getMaterialTex('metal_dark'), []);
+  const upTex = useMemo(() => getObjectTexture("elevator_btn_up", accentColor), [accentColor]);
+  const downTex = useMemo(() => getObjectTexture("elevator_btn_down", accentColor), [accentColor]);
+
+  const doorWidth = ELEVATOR_DOOR_NATIVE_W * ELEVATOR_DOOR_SCALE;
+  const doorHeight = ELEVATOR_DOOR_NATIVE_H * ELEVATOR_DOOR_SCALE;
+  const panelX = doorWidth / 2 + doorWidth * 0.12;
+  const panelY = doorHeight * 0.5;
+  const panelW = doorWidth * 0.09;
+  const panelH = doorWidth * 0.2;
+  const panelD = doorWidth * 0.035;
+  const btnRadius = panelW * 0.36;
+  const btnDepth = panelD * 0.6;
+  const btnZ = panelD / 2 + btnDepth / 2;
+
+  const puckMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: "#151515", roughness: 0.4, metalness: 0.6 }),
+    []
+  );
+  const upFaceMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ map: upTex, emissive: accent, emissiveMap: upTex, emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.3, side: THREE.DoubleSide }),
+    [upTex, accent]
+  );
+  const downFaceMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ map: downTex, emissive: accent, emissiveMap: downTex, emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.3, side: THREE.DoubleSide }),
+    [downTex, accent]
+  );
+
+  return (
+    <group position={[panelX, panelY, 0]}>
+      <mesh castShadow={shadowsOn} receiveShadow={shadowsOn}>
+        <boxGeometry args={[panelW, panelH, panelD]} />
+        <meshStandardMaterial map={plateTex} color="#3a3a3a" roughness={0.5} metalness={0.7} />
+      </mesh>
+      {/* Up button */}
+      <mesh position={[0, panelH * 0.24, btnZ]} rotation={[Math.PI / 2, 0, 0]} castShadow={shadowsOn}>
+        <cylinderGeometry args={[btnRadius, btnRadius, btnDepth, 24]} />
+        <primitive object={puckMat} attach="material" />
+      </mesh>
+      <mesh position={[0, panelH * 0.24, btnZ + btnDepth / 2 + 0.001]} material={upFaceMat}>
+        <circleGeometry args={[btnRadius * 0.98, 24]} />
+      </mesh>
+      {/* Down button */}
+      <mesh position={[0, -panelH * 0.24, btnZ]} rotation={[Math.PI / 2, 0, 0]} castShadow={shadowsOn}>
+        <cylinderGeometry args={[btnRadius, btnRadius, btnDepth, 24]} />
+        <primitive object={puckMat} attach="material" />
+      </mesh>
+      <mesh position={[0, -panelH * 0.24, btnZ + btnDepth / 2 + 0.001]} material={downFaceMat}>
+        <circleGeometry args={[btnRadius * 0.98, 24]} />
+      </mesh>
+      <pointLight position={[0, 0, panelD * 2]} color={accentColor} intensity={0.6} distance={1.5} decay={2} />
+    </group>
+  );
+}
+
+function ElevatorModel({ shadowsOn, accentColor }: { shadowsOn: boolean; accentColor: string }) {
+  return (
+    <>
+      <GltfProp url={ELEVATOR_DOOR_URL} scale={ELEVATOR_DOOR_SCALE} shadowsOn={shadowsOn} />
+      <ElevatorCallPanel shadowsOn={shadowsOn} accentColor={accentColor} />
+    </>
+  );
+}
+
+useGLTF.preload(ELEVATOR_DOOR_URL);
+
+// Security safe — a real CC0 steel-safe model ("Safe" by CreativeTrio, via
+// poly.pizza) standing in for the flat textured box in SECURITY_OFFICE. The
+// safe puzzle's dial and handle lever are kept exactly as they were (real
+// primitive geometry, animated in ObjMesh's useFrame on solve) — only their
+// z-offset changes, from "proud of the old box's front face" to "proud of
+// this model's actual (deeper) front face", so they still sit correctly on
+// the safe door instead of floating in front of or clipping into it.
+const SECURITY_SAFE_URL = "/models/furniture/securitySafe.glb";
+const SECURITY_SAFE_SCALE = 2.0;
+// Native size measured from the GLTF accessor bounds *after* applying the
+// model's own 100x node-level scale (the raw accessor bounds alone are in
+// millimeters — Box3.setFromObject in GltfProp handles this automatically
+// at runtime, but these constants are needed here ahead of time to size the
+// dial/handle overlay).
+const SECURITY_SAFE_NATIVE_W = 0.244;
+const SECURITY_SAFE_NATIVE_H = 0.2432;
+const SECURITY_SAFE_NATIVE_D = 0.2654;
+const SECURITY_SAFE_HALF_DEPTH = (SECURITY_SAFE_NATIVE_D * SECURITY_SAFE_SCALE) / 2;
+// The dial/handle render in ObjMesh's outer (unscaled) group, where y=0 is
+// the old box's vertical center — but the real model sits in a group offset
+// down by half the box height (see usesRealModel's -scale[1]/2 pattern), so
+// its own vertical center lands below y=0. Recompute that offset here so
+// the dial/handle can be centered on the model instead of the old box.
+const SECURITY_SAFE_CENTER_Y =
+  -(OBJ_SCALE.security_safe[1] / 2) + (SECURITY_SAFE_NATIVE_H * SECURITY_SAFE_SCALE) / 2;
+
+function SecuritySafeModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return <GltfProp url={SECURITY_SAFE_URL} scale={SECURITY_SAFE_SCALE} shadowsOn={shadowsOn} />;
+}
+
+useGLTF.preload(SECURITY_SAFE_URL);
+
+// Marcus's PC — reskinned as a small floating drone-like robot companion
+// ("Drone with Orb" by Adam Marc Williams, CC-BY, via poly.pizza) instead of
+// a wall-mounted monitor, for both its resting state (ObjMesh's marcus_pc
+// case) and its animated following state (FloatingMarcusPC). This is a
+// static (non-rigged) model used as a stylistic stand-in for a "floating AI
+// companion" — not a reproduction of any copyrighted character design.
+// (An earlier rigged/skinned model rendered fine at rest but silently failed
+// to appear once animated/repositioned each frame by FloatingMarcusPC — its
+// skeleton's bounds apparently didn't track the live pose reliably through
+// our simple clone()-based GLTF loader. Swapped to this static model to
+// sidestep skinned-mesh cloning/posing pitfalls entirely.)
+const MARCUS_ROBOT_URL = "/models/furniture/marcusRobot.glb";
+const MARCUS_ROBOT_SCALE = 0.8;
+const MARCUS_ROBOT_ROTATION_Y = 0;
+
+function MarcusRobotModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return (
+    <GltfProp
+      url={MARCUS_ROBOT_URL}
+      scale={MARCUS_ROBOT_SCALE}
+      rotationY={MARCUS_ROBOT_ROTATION_Y}
+      shadowsOn={shadowsOn}
+    />
+  );
+}
+
+useGLTF.preload(MARCUS_ROBOT_URL);
+
+// Research Workstation (RESEARCH_LAB's "workstation_a") — a real desk (same
+// Kenney model as the reception desk) with two monitors, a keyboard/mouse
+// (the "computer"), and a real CC0 lab-equipment cluster (beakers, flasks,
+// and other apparatus — "Blocks Lab Equipment" by Don Carson, CC-BY, via
+// poly.pizza) standing in for the flat textured box's "dual monitors +
+// research desk" mural. Uses the same real-model/invisible-hitbox pattern as
+// every other swapped object in this file.
+const LAB_EQUIPMENT_URL = "/models/furniture/labEquipment.glb";
+const WORKSTATION_DESK_SCALE = 2.4;
+const WORKSTATION_DESK_WIDTH_SCALE = WORKSTATION_DESK_SCALE * 1.3; // 30% wider
+const WORKSTATION_DESK_TOP_Y = RECEPTION_DESK_NATIVE_H * WORKSTATION_DESK_SCALE;
+const WORKSTATION_MONITOR_SCALE = 1.4375; // 25% bigger
+const WORKSTATION_KEYBOARD_SCALE = 1.2;
+const WORKSTATION_LAB_EQUIPMENT_SCALE = 0.22;
+const WORKSTATION_MONITOR_X_OFFSETS = [-0.4, 0.35];
+
+function WorkstationModel({ shadowsOn }: { shadowsOn: boolean }) {
+  return (
+    <>
+      <GltfProp
+        url={RECEPTION_DESK_URL}
+        scale={[WORKSTATION_DESK_WIDTH_SCALE, WORKSTATION_DESK_SCALE, WORKSTATION_DESK_SCALE]}
+        shadowsOn={shadowsOn}
+      />
+      {WORKSTATION_MONITOR_X_OFFSETS.map((x) => (
+        <GltfProp
+          key={x}
+          url={RECEPTION_MONITOR_URL}
+          scale={WORKSTATION_MONITOR_SCALE}
+          position={[x, WORKSTATION_DESK_TOP_Y, -0.15]}
+          shadowsOn={shadowsOn}
+        />
+      ))}
+      <GltfProp
+        url={RECEPTION_KEYBOARD_URL}
+        scale={WORKSTATION_KEYBOARD_SCALE}
+        position={[-0.4, WORKSTATION_DESK_TOP_Y, 0.22]}
+        shadowsOn={shadowsOn}
+      />
+      <GltfProp
+        url={RECEPTION_MOUSE_URL}
+        scale={WORKSTATION_KEYBOARD_SCALE}
+        position={[-0.1, WORKSTATION_DESK_TOP_Y, 0.22]}
+        shadowsOn={shadowsOn}
+      />
+      {/* Research tools — beakers/flasks/apparatus cluster, on the desk's
+          right-hand end, clear of the monitors and keyboard/mouse. */}
+      <GltfProp
+        url={LAB_EQUIPMENT_URL}
+        scale={WORKSTATION_LAB_EQUIPMENT_SCALE}
+        position={[0.85, WORKSTATION_DESK_TOP_Y, 0.05]}
+        shadowsOn={shadowsOn}
+      />
+    </>
+  );
+}
+
+useGLTF.preload(LAB_EQUIPMENT_URL);
 
 // Decorative-only server racks continuing the row from the interactive
 // "server_racks" object (at [-6.3, 2.0, -5.6]) along the SERVER_ROOM north wall.
@@ -347,9 +746,6 @@ function buildObjectTexture(objectId: string, accent: string): THREE.CanvasTextu
         col(r === 0 && cc === 0 ? "#ff3333" : accent, 0.85); lw(2);
         box(bx, by, 0.12, 0.08);
       }
-      // keypad
-      col(accent, 0.8); box(0.6, 0.42, 0.3, 0.38);
-      lw(1); for (let i = 1; i < 3; i++) { ln(0.6, 0.42 + i * 0.127, 0.9, 0.42 + i * 0.127); ln(0.6 + i * 0.1, 0.42, 0.6 + i * 0.1, 0.8); }
       col(accent, 0.9); txt("SECURITY PANEL", 0.5, 0.95);
       break;
 
@@ -369,6 +765,17 @@ function buildObjectTexture(objectId: string, accent: string): THREE.CanvasTextu
       col(accent, 0.8); lw(2); box(0.78, 0.3, 0.12, 0.35);
       for (let i = 0; i < 4; i++) circ(0.84, 0.36 + i * 0.08, 0.022);
       col(accent, 0.9); txt("ELEVATOR", 0.5, 0.93, 0.05);
+      break;
+
+    // Small round call-button faces for ElevatorModel's 3D up/down buttons
+    // (mounted beside the real door model) — reuses this same canvas-texture
+    // system rather than a one-off, so the glyph/glow stay theme-consistent.
+    case "elevator_btn_up":
+    case "elevator_btn_down":
+      bg("#020204");
+      col(accent, 0.9); circ(0.5, 0.5, 0.42, true);
+      col("#0a0a0a", 1);
+      txt(objectId === "elevator_btn_up" ? "▲" : "▼", 0.5, 0.63, 0.42);
       break;
 
     case "coffee_machine":
@@ -1248,6 +1655,23 @@ function ObjMesh({
   const isSafe   = objectId === "security_safe";
   const isPod    = objectId === "escape_pod";
   const isSwitch = objectId === "shutdown_switch";
+  // Reception desk, coffee machine, elevator, security console, the
+  // security safe (isSafe, above), Marcus's PC, and the research workstation
+  // all render real furniture/appliance/door/robot models instead of the
+  // flat textured box — see ReceptionDeskModel / CoffeeMachineModel /
+  // ElevatorModel / SecurityConsoleModel / SecuritySafeModel /
+  // MarcusRobotModel / WorkstationModel. The box below still exists as an
+  // invisible raycasting hitbox at the same OBJ_POS/OBJ_SCALE for all seven
+  // (marcus_pc's resting state only — its separate floating/following state
+  // is FloatingMarcusPC, further down).
+  const isReceptionDesk    = objectId === "reception_desk";
+  const isCoffeeMachine    = objectId === "coffee_machine";
+  const isElevator         = objectId === "elevator";
+  const isSecurityConsole  = objectId === "security_console";
+  const isMarcusPC         = objectId === "marcus_pc";
+  const isWorkstation      = objectId === "workstation_a";
+  const isCeoDesk          = objectId === "ceo_desk";
+  const usesRealModel = isReceptionDesk || isCoffeeMachine || isElevator || isSecurityConsole || isSafe || isMarcusPC || isWorkstation || isCeoDesk;
   const dialRef        = useRef<THREE.Mesh>(null);
   const safeHandleRef  = useRef<THREE.Mesh>(null);
   const switchCoverRef = useRef<THREE.Group>(null);
@@ -1304,6 +1728,15 @@ function ObjMesh({
       })
     : sideMat;
 
+  // Objects with a real GLTF model keep this box purely as a raycasting
+  // hitbox — the model is the visible layer, so make every face fully
+  // transparent and depthWrite-off (otherwise its invisible geometry would
+  // still write to the depth buffer / shadow map and occlude or cast a
+  // phantom box-shaped shadow over the real model rendered on top).
+  if (usesRealModel) {
+    for (const m of [frontMat, sideMat, topMat]) { m.transparent = true; m.opacity = 0; m.depthWrite = false; }
+  }
+
   // BoxGeometry face order: +x, -x, +y(top), -y(bottom), +z(front), -z(back)
   const mats = [sideMat, sideMat, topMat, sideMat, frontMat, sideMat];
 
@@ -1345,7 +1778,15 @@ function ObjMesh({
     for (const i of sideIdx) {
       mArr[i].emissiveIntensity = THREE.MathUtils.lerp(mArr[i].emissiveIntensity, targetSide, 0.1);
     }
-    if (lightRef.current) lightRef.current.intensity = THREE.MathUtils.lerp(lightRef.current.intensity, isFocused ? 3 : 1, 0.1);
+    // Real GLTF models (usesRealModel) have no emissiveMap of their own —
+    // unlike the flat canvas-textured box, which glowed on its own regardless
+    // of scene lighting — so they need a noticeably brighter object light to
+    // read at all in these otherwise near-black rooms.
+    if (lightRef.current) {
+      const baseIntensity = usesRealModel ? 4.5 : 1;
+      const focusIntensity = usesRealModel ? 6.5 : 3;
+      lightRef.current.intensity = THREE.MathUtils.lerp(lightRef.current.intensity, isFocused ? focusIntensity : baseIntensity, 0.1);
+    }
 
     // Mechanical interaction animations. All use THREE.MathUtils.damp (an
     // exponential ease toward whatever the current target is) rather than a
@@ -1367,7 +1808,12 @@ function ObjMesh({
 
   return (
     <group position={[pos[0], pos[1], pos[2]]} rotation={[phoneRotX, pos[3] ?? 0, 0]}>
-      <mesh ref={meshRef} scale={scale} castShadow={shadowsOn} receiveShadow={shadowsOn}>
+      <mesh
+        ref={meshRef}
+        scale={scale}
+        castShadow={shadowsOn && !usesRealModel}
+        receiveShadow={shadowsOn && !usesRealModel}
+      >
         {isRounded ? (
           <RoundedBoxGeometry args={[1, 1, 1]} radius={PC_CORNER_RADIUS} smoothness={4} />
         ) : (
@@ -1375,6 +1821,24 @@ function ObjMesh({
         )}
         <primitive object={isRounded ? roundedMats : mats} attach="material" />
       </mesh>
+      {usesRealModel && (
+        // Local y = -scale[1]/2 lands the model's base (real models sit
+        // with their own base at local y=0) on the invisible hitbox's
+        // bottom face — the floor for the reception desk and elevator, the
+        // coffee table's top for the coffee machine.
+        <Suspense fallback={null}>
+          <group position={[0, -scale[1] / 2, 0]}>
+            {isReceptionDesk && <ReceptionDeskModel shadowsOn={shadowsOn} />}
+            {isCoffeeMachine && <CoffeeMachineModel shadowsOn={shadowsOn} />}
+            {isElevator && <ElevatorModel shadowsOn={shadowsOn} accentColor={theme.accent} />}
+            {isSecurityConsole && <SecurityConsoleModel shadowsOn={shadowsOn} />}
+            {isSafe && <SecuritySafeModel shadowsOn={shadowsOn} />}
+            {isMarcusPC && <MarcusRobotModel shadowsOn={shadowsOn} />}
+            {isWorkstation && <WorkstationModel shadowsOn={shadowsOn} />}
+            {isCeoDesk && <CeoDeskModel shadowsOn={shadowsOn} />}
+          </group>
+        </Suspense>
+      )}
       {isPhone && (
         <>
           {/* Mounting hook peg */}
@@ -1393,20 +1857,22 @@ function ObjMesh({
       )}
       {isSafe && (
         <>
-          {/* Rotary combination dial, mounted proud of the front face — spins
-              several full turns and lands "open" the moment the safe puzzle
-              is solved (see isSolved / OBJECT_PUZZLE_MAP above). */}
-          <mesh ref={dialRef} position={[scale[0] * 0.15, 0, scale[2] / 2 + 0.02]} rotation={[Math.PI / 2, 0, 0]} castShadow={shadowsOn}>
+          {/* Rotary combination dial, mounted proud of the real safe model's
+              front face (SECURITY_SAFE_HALF_DEPTH/CENTER_Y — deeper and
+              lower than the old invisible box's own center) — spins several
+              full turns and lands "open" the moment the safe puzzle is
+              solved (see isSolved / OBJECT_PUZZLE_MAP above). */}
+          <mesh ref={dialRef} position={[scale[0] * 0.15, SECURITY_SAFE_CENTER_Y, SECURITY_SAFE_HALF_DEPTH + 0.02]} rotation={[Math.PI / 2, 0, 0]} castShadow={shadowsOn}>
             <cylinderGeometry args={[0.09, 0.09, 0.03, 20]} />
             <meshStandardMaterial color="#cfcfcf" roughness={0.25} metalness={0.9} />
           </mesh>
           {/* Index notch so the dial's rotation actually reads as motion */}
-          <mesh position={[scale[0] * 0.15, 0.06, scale[2] / 2 + 0.041]}>
+          <mesh position={[scale[0] * 0.15, SECURITY_SAFE_CENTER_Y + 0.06, SECURITY_SAFE_HALF_DEPTH + 0.041]}>
             <boxGeometry args={[0.012, 0.02, 0.005]} />
             <meshStandardMaterial color="#111111" />
           </mesh>
           {/* Handle lever — snaps from horizontal (locked) to vertical (open) */}
-          <mesh ref={safeHandleRef} position={[-scale[0] * 0.2, 0, scale[2] / 2 + 0.03]}>
+          <mesh ref={safeHandleRef} position={[-scale[0] * 0.2, SECURITY_SAFE_CENTER_Y, SECURITY_SAFE_HALF_DEPTH + 0.03]}>
             <boxGeometry args={[0.16, 0.03, 0.03]} />
             <meshStandardMaterial color="#8a8a8a" roughness={0.3} metalness={0.85} />
           </mesh>
@@ -1422,8 +1888,36 @@ function ObjMesh({
           </mesh>
         </group>
       )}
-      {/* Object-local point light so it illuminates itself in the dark room */}
-      <pointLight ref={lightRef} color={theme.accent} intensity={1} distance={3.5} decay={2} />
+      {/* Object-local point light so it illuminates itself in the dark room.
+          Real-model objects start brighter and reach further (see the
+          useFrame lerp above) since they have no self-emissive material.
+          Skipped for the CEO desk — its wide, low-decay throw was pooling as
+          a visible yellow (theme.accent) glow on the floor beneath the real
+          desk model; the desk still reads fine under the room's overhead
+          key light. */}
+      {!isCeoDesk && (
+        <pointLight
+          ref={lightRef}
+          color={theme.accent}
+          // Sitting dead-center inside the object (the default [0,0,0]) means
+          // the light has to shine through the mesh to reach its own visible
+          // face — pull it out in front (+z, this file's "front" convention)
+          // for real models so it actually lights the surface the player
+          // looks at, instead of mostly leaking into the floor/walls around it.
+          // The workstation is the one exception: its light sits behind the
+          // desk (-z, against the wall it's flush with) instead of in front.
+          position={
+            isWorkstation
+              ? [0, 0, -(scale[2] / 2 + 0.35)]
+              : usesRealModel
+                ? [0, 0, scale[2] / 2 + 0.35]
+                : [0, 0, 0]
+          }
+          intensity={usesRealModel ? 4.5 : 1}
+          distance={usesRealModel ? 6 : 3.5}
+          decay={usesRealModel ? 1.5 : 2}
+        />
+      )}
     </group>
   );
 }
@@ -1867,6 +2361,8 @@ function FloatingMarcusPC({ roomId, isFocused, registerMesh, unregisterMesh }: F
   const lightRef = useRef<THREE.PointLight>(null);
   const theme    = THEME[roomId];
   const accent   = new THREE.Color(theme.accent);
+  const quality   = useGraphicsStore((s) => s.quality);
+  const shadowsOn = getQualityPreset(quality).shadows.enabled;
 
   const tex     = getObjectTexture("marcus_pc", theme.accent);
   tex.offset.set(PC_CORNER_RADIUS, PC_CORNER_RADIUS);
@@ -1882,6 +2378,10 @@ function FloatingMarcusPC({ roomId, isFocused, registerMesh, unregisterMesh }: F
     map: sideTex, color: "#5a5a5a", emissive: accent, emissiveMap: sideTex,
     emissiveIntensity: 0.35, roughness, metalness,
   });
+  // Same real-model swap as ObjMesh's usesRealModel objects — this box stays
+  // only as the raycasting hitbox (registerMesh below), fully invisible,
+  // while MarcusRobotModel is the actual visible layer.
+  for (const m of [frontMat, sideMat]) { m.transparent = true; m.opacity = 0; m.depthWrite = false; }
   // RoundedBoxGeometry exposes 2 material groups: 0 = front/back caps, 1 = side walls
   const mats = [frontMat, sideMat];
 
@@ -1929,8 +2429,11 @@ function FloatingMarcusPC({ roomId, isFocused, registerMesh, unregisterMesh }: F
       mArr[1].emissiveIntensity = THREE.MathUtils.lerp(mArr[1].emissiveIntensity, targetSide, 0.1);
     }
     if (lightRef.current) {
+      // Same brighter/further-reaching real-model treatment as ObjMesh's
+      // usesRealModel objects (see the matching comment there) — the robot
+      // model has no self-emissive material of its own.
       lightRef.current.intensity = THREE.MathUtils.lerp(
-        lightRef.current.intensity, isFocused ? 3 : 1.5, 0.1,
+        lightRef.current.intensity, isFocused ? 6.5 : 4.5, 0.1,
       );
     }
   });
@@ -1939,11 +2442,23 @@ function FloatingMarcusPC({ roomId, isFocused, registerMesh, unregisterMesh }: F
 
   return (
     <group ref={groupRef} position={[3, PLAYER_H - 0.45, 3.5]}>
-      <mesh ref={meshRef} scale={scale}>
+      <mesh ref={meshRef} scale={scale} castShadow={false} receiveShadow={false}>
         <RoundedBoxGeometry args={[1, 1, 1]} radius={PC_CORNER_RADIUS} smoothness={4} />
         <primitive object={mats} attach="material" />
       </mesh>
-      <pointLight ref={lightRef} color={theme.accent} intensity={1.5} distance={3.5} decay={2} />
+      <Suspense fallback={null}>
+        <group position={[0, -scale[1] / 2, 0]}>
+          <MarcusRobotModel shadowsOn={shadowsOn} />
+        </group>
+      </Suspense>
+      <pointLight
+        ref={lightRef}
+        color={theme.accent}
+        position={[0, 0, scale[2] / 2 + 0.35]}
+        intensity={4.5}
+        distance={6}
+        decay={1.5}
+      />
     </group>
   );
 }
@@ -2045,11 +2560,19 @@ function Scene({ roomId, inspectedObjects, isLocked, exitLockStatus, focusedIdRe
         </>
       )}
       {/* Coffee machine steam — reuses the same ParticleField as the ambient
-          dust, just narrower, faster-rising, and anchored above the machine. */}
+          dust, just narrower, faster-rising, and anchored above the machine.
+          Anchor y is derived from the real model's own height (table top +
+          COFFEE_MACHINE_TOP_Y), not the old invisible hitbox's — that box
+          (OBJ_POS/OBJ_SCALE) is kept only for raycasting and is taller than
+          the real model now standing in for it. */}
       {roomId === "LOBBY" && (
         <ParticleField
           count={Math.round(28 * particlePreset.densityMultiplier)}
-          position={[OBJ_POS.coffee_machine[0], OBJ_POS.coffee_machine[1] + 0.75, OBJ_POS.coffee_machine[2]]}
+          position={[
+            OBJ_POS.coffee_machine[0],
+            OBJ_POS.coffee_machine[1] - OBJ_SCALE.coffee_machine[1] / 2 + COFFEE_MACHINE_TOP_Y + 0.05,
+            OBJ_POS.coffee_machine[2],
+          ]}
           spread={[0.12, 0.45, 0.12]}
           color="#e8ecf1"
           size={0.025}

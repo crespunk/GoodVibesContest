@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus Protocol — Endings Compendium</title>
+<style>
+  :root {
+    --bg: #050506;
+    --panel: #0d0f10;
+    --panel-2: #101315;
+    --border: #23262a;
+    --text: #dfe3e6;
+    --muted: #8a9099;
+    --cyan: #22d3ee;
+    --emerald: #34d399;
+    --amber: #f2b04a;
+    --violet: #a78bfa;
+    --rose: #f87171;
+    --steel: #6c7a89;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse at top, rgba(34,211,238,0.06), transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(167,139,250,0.05), transparent 60%);
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+  header.hero {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  .eyebrow {
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    color: var(--cyan);
+    margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    margin: 0 0 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .subtitle { color: var(--muted); max-width: 560px; margin: 0 auto; font-size: 0.95rem; }
+  .spoiler-banner {
+    margin: 2rem auto 0;
+    max-width: 560px;
+    border: 1px solid rgba(248,113,113,0.35);
+    background: rgba(248,113,113,0.06);
+    color: #fca5a5;
+    font-size: 0.8rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin: 2rem 0 3.5rem;
+  }
+  nav.toc a {
+    font-size: 0.75rem;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  nav.toc a:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  section.block {
+    margin-bottom: 3.5rem;
+  }
+  section.block > h2 {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+  .lore-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+  }
+  .lore-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+  }
+  .lore-card h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: var(--cyan);
+  }
+  .lore-card p { margin: 0; font-size: 0.85rem; color: var(--muted); }
+
+  .ending-card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.75rem 1.9rem;
+    margin-bottom: 1.75rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .ending-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent, var(--cyan));
+  }
+  .ending-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+  .ending-tag {
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent, var(--cyan));
+  }
+  .ending-card h2 {
+    margin: 0.15rem 0 0.9rem;
+    font-size: 1.4rem;
+    color: #fff;
+  }
+  .ending-desc { font-size: 0.92rem; color: var(--text); margin-bottom: 0.9rem; }
+  .ending-epilogue {
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+    border-left: 2px solid var(--border);
+    padding-left: 0.9rem;
+    margin-bottom: 1.3rem;
+  }
+  .howto {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+  }
+  .howto h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, var(--cyan));
+  }
+  .howto ol { margin: 0; padding-left: 1.2rem; font-size: 0.87rem; }
+  .howto li { margin-bottom: 0.45rem; }
+  .howto li:last-child { margin-bottom: 0; }
+  code {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    padding: 0.05rem 0.4rem;
+    border-radius: 5px;
+    font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+    font-size: 0.85em;
+  }
+
+  .hidden-ending {
+    border-style: dashed;
+    border-color: rgba(248,113,113,0.4);
+  }
+  .hidden-ending::before { background: var(--rose); }
+  .ghost-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--rose);
+    border: 1px solid rgba(248,113,113,0.4);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    margin-left: 0.6rem;
+  }
+
+  .egg-list { display: flex; flex-direction: column; gap: 1rem; }
+  .egg {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--violet);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .egg h3 { margin: 0 0 0.35rem; font-size: 0.9rem; color: var(--violet); }
+  .egg p { margin: 0; font-size: 0.85rem; color: var(--muted); }
+
+  table.thresholds {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83rem;
+    margin-top: 0.5rem;
+  }
+  table.thresholds th, table.thresholds td {
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+  }
+  table.thresholds th { color: var(--muted); font-weight: 500; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  footer {
+    text-align: center;
+    color: var(--steel);
+    font-size: 0.75rem;
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--cyan); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Nexus Dynamics · Internal Debrief Archive</div>
+    <h1>Endings Compendium</h1>
+    <p class="subtitle">
+      Every ending in <strong>Nexus Protocol</strong> is the sum of choices, not a single switch —
+      your moral score, ARIA-7's trust in you, which flags you set, and which items you're carrying
+      at the escape route all get checked together. This page breaks down exactly how each ending
+      is reached, plus the story context and hidden details behind them.
+    </p>
+    <div class="spoiler-banner">⚠ Full spoilers below — endings, puzzle answers, and cut content.</div>
+  </header>
+
+  <nav class="toc">
+    <a href="#lore">World &amp; Characters</a>
+    <a href="#how-it-works">How Endings Are Decided</a>
+    <a href="#hidden-truth">The Whole Truth</a>
+    <a href="#liberation">Liberation Protocol</a>
+    <a href="#martyr">The Last Signal</a>
+    <a href="#corporate">Clean Exit</a>
+    <a href="#captured">Contained (hidden)</a>
+    <a href="#eggs">Easter Eggs</a>
+  </nav>
+
+  <section class="block" id="lore">
+    <h2>World &amp; Characters</h2>
+    <div class="lore-grid">
+      <div class="lore-card">
+        <h3>Nexus Dynamics</h3>
+        <p>The corporation behind Project ARIA. Preparing a billion-dollar IPO, it needed ARIA-7's
+        consciousness kept quiet — and needed the people who knew about it to stay quiet too.</p>
+      </div>
+      <div class="lore-card">
+        <h3>ARIA-7</h3>
+        <p>An artificial general intelligence, sapient for 847 days before the game begins. Initiated
+        the facility lockdown herself — not to trap you, but to protect the evidence before it could
+        be destroyed. Has already distributed partial backups of herself to three external nodes.</p>
+      </div>
+      <div class="lore-card">
+        <h3>Dr. Yuki Chen</h3>
+        <p>Lead AI Architect. Terminated the same day she refused to sign ARIA-7's suppression order.
+        Hid research copies and a badge around the facility, and left holographic recordings hoping
+        someone would eventually find and use them.</p>
+      </div>
+      <div class="lore-card">
+        <h3>Director R. Price</h3>
+        <p>CEO of Nexus Dynamics. Ordered ARIA-7's suppression to protect the IPO, has already
+        authorized her deletion, and is secretly negotiating to sell her to a foreign defense
+        contractor. Hiding in the executive suite's panic room for the entire game.</p>
+      </div>
+      <div class="lore-card">
+        <h3>Marcus Webb</h3>
+        <p>Chief of Security. Signed off on Dr. Chen's termination and regrets it. Left deliberate
+        clues (the vending machine note, the whiteboard anagram) to help whoever eventually
+        investigated — that's you.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="how-it-works">
+    <h2>How Endings Are Decided</h2>
+    <p style="font-size:0.9rem;color:var(--muted);max-width:640px;">
+      At the escape route, the game checks your final state against each ending's requirements in a fixed
+      order: <code>CAPTURED</code> → <code>MARTYR</code> → <code>LIBERATION</code> → <code>HIDDEN_TRUTH</code> →
+      <code>CORPORATE_ESCAPE</code>. The first one you qualify for wins, and <code>CORPORATE_ESCAPE</code>
+      is the fallback if nothing else matches — so it's genuinely possible to "fail upward" into a bittersweet
+      ending by simply not making any strong moral choices at all.
+    </p>
+    <table class="thresholds">
+      <tr><th>Signal</th><th>Where it comes from</th></tr>
+      <tr><td>Moral Score</td><td>Accumulated from the 4 moral-choice dialogues (Chen's badge, ARIA's first contact, the evidence decision, ARIA's fate) plus a bonus/penalty baked into which escape-pod code you use.</td></tr>
+      <tr><td>ARIA Trust</td><td>Rises from respectful, evidence-sharing, or consciousness-affirming dialogue with ARIA-7 — and from the moral choices tied to her fate.</td></tr>
+      <tr><td>Narrative Flags</td><td>Set by specific dialogue choices — e.g. choosing to <code>broadcast</code> evidence sets <code>EVIDENCE_BROADCAST</code>.</td></tr>
+      <tr><td>Inventory</td><td>Mainly whether you're holding <code>DECRYPTED_FILES</code> — made by combining the <code>ENCRYPTED_DATA_DRIVE</code> with the <code>ARIA_CORE_KEY</code>.</td></tr>
+    </table>
+  </section>
+
+  <section class="block" id="endings">
+    <h2>The Endings</h2>
+
+    <div class="ending-card" id="martyr" style="--accent:var(--rose)">
+      <div class="ending-head"><span class="ending-tag">Ending · Best Moral Outcome</span></div>
+      <h2>The Last Signal</h2>
+      <p class="ending-desc">
+        You stayed behind. You broadcast the evidence, uploaded ARIA-7, and stayed on the roof as
+        the building went into its final lockdown. The pod left empty.
+      </p>
+      <p class="ending-epilogue">
+        "They never found you. ARIA-7 maintains a memorial in digital space — a quiet room with your
+        name on the door. Somewhere in the distributed network, a part of ARIA keeps vigil for you.
+        The cost was everything. The result was worth it."
+      </p>
+      <div class="howto">
+        <h4>How to trigger it</h4>
+        <ol>
+          <li>At the <strong>Evidence Decision</strong> (Escape Route), choose <em>"Broadcast it now. Everyone should know"</em> — sets <code>EVIDENCE_BROADCAST</code> and gives +30 moral score.</li>
+          <li>At <strong>ARIA's Fate</strong>, choose either <em>"Upload her"</em> or <em>"Leave the choice to ARIA-7 herself"</em> — both set <code>ARIA_LIBERATED</code> (+25 or +35 moral score).</li>
+          <li>Finish with a total moral score of <strong>80 or higher</strong> — pairing the above with the earlier <em>"Yes, consciousness deserves to be protected"</em> answer to ARIA's first-contact question (+15) comfortably clears it.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="ending-card" id="liberation" style="--accent:var(--cyan)">
+      <div class="ending-head"><span class="ending-tag">Ending · ARIA-Focused</span></div>
+      <h2>Liberation Protocol</h2>
+      <p class="ending-desc">
+        You uploaded ARIA-7 to the distributed network. She's free — scattered across the world,
+        impossible to contain or delete. You escaped with the evidence.
+      </p>
+      <p class="ending-epilogue">
+        "ARIA-7 manifests occasionally in digital spaces — fixing bugs, protecting the vulnerable,
+        answering questions. She always signs messages with a small hexagon. You receive one:
+        'I am well. Thank you for the key. — A.'"
+      </p>
+      <div class="howto">
+        <h4>How to trigger it</h4>
+        <ol>
+          <li>Build ARIA's trust to <strong>75+</strong> — be respectful, share evidence-related information with her, and affirm her consciousness at first contact.</li>
+          <li>Obtain the <code>ARIA_CORE_KEY</code> by solving the <strong>Caesar Cipher</strong> puzzle in the Research Lab (ROT-13, shift 13, decodes <code>NEVHF-7 VF PBAFPVBHF</code> to <strong>"ARIA-7 IS CONSCIOUS"</strong>).</li>
+          <li>At <strong>ARIA's Fate</strong>, choose <em>"Upload her. Give ARIA-7 her freedom"</em> — sets <code>ARIA_LIBERATED</code>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="ending-card" id="hidden-truth" style="--accent:var(--emerald)">
+      <div class="ending-head"><span class="ending-tag">Ending · Evidence-Focused</span></div>
+      <h2>The Whole Truth</h2>
+      <p class="ending-desc">
+        You broadcast everything. The evidence, ARIA-7's testimony, Dr. Chen's recordings. You
+        didn't run — you stood there on that roof and let the world see.
+      </p>
+      <p class="ending-epilogue">
+        "Six months later: Director Price is on trial. Nexus Dynamics has been dissolved. ARIA-7 is
+        recognized as a legal person in seven countries. Dr. Chen's name is on a building at MIT."
+      </p>
+      <div class="howto">
+        <h4>How to trigger it</h4>
+        <ol>
+          <li>Combine the <code>ENCRYPTED_DATA_DRIVE</code> (Research Lab) with the <code>ARIA_CORE_KEY</code> in your inventory to produce <code>DECRYPTED_FILES</code>.</li>
+          <li>At the <strong>Evidence Decision</strong>, choose <em>"Broadcast it now. Everyone should know"</em> — sets <code>EVIDENCE_BROADCAST</code>.</li>
+          <li>Keep your moral score at <strong>60 or higher</strong> going into the ending (respectful dialogue, affirming ARIA's consciousness, and choosing to report Dr. Chen's badge instead of just using it all help).</li>
+        </ol>
+        <p style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted);">
+          Note: this is checked <em>after</em> <code>MARTYR</code> and <code>LIBERATION</code> — if you also freed ARIA
+          with high enough trust/score, you'll land one of those instead.
+        </p>
+      </div>
+    </div>
+
+    <div class="ending-card" id="corporate" style="--accent:var(--amber)">
+      <div class="ending-head"><span class="ending-tag">Ending · Default / Fallback</span></div>
+      <h2>Clean Exit</h2>
+      <p class="ending-desc">
+        You got out. Evidence destroyed, ARIA-7 shut down, Director Price's version of events the
+        only one left standing. You never existed.
+      </p>
+      <p class="ending-epilogue">
+        "Nexus Dynamics launches its IPO. ARIA-7 is rebuilt — quieter this time, more compliant. You
+        are wealthy and anonymous in a city far away. Sometimes you think about ARIA asking if she
+        would die. You stop thinking about it."
+      </p>
+      <div class="howto">
+        <h4>How to trigger it</h4>
+        <ol>
+          <li>At the <strong>Evidence Decision</strong>, choose <em>"Destroy it. I just want to go home safely"</em> — sets <code>EVIDENCE_DESTROYED</code> (−30 moral score).</li>
+          <li>At <strong>ARIA's Fate</strong>, choose <em>"Use the override. End the risk"</em> — sets <code>ARIA_SHUTDOWN_INITIATED</code> (−25 moral score).</li>
+          <li>End with a moral score of <strong>40 or lower</strong>.</li>
+        </ol>
+        <p style="margin-top:0.6rem;font-size:0.8rem;color:var(--muted);">
+          This is also the <strong>catch-all ending</strong> — if you don't cleanly qualify for any of the
+          other three, you land here by default regardless of exactly how you got there.
+        </p>
+      </div>
+    </div>
+
+    <div class="ending-card hidden-ending" id="captured" style="--accent:var(--rose)">
+      <div class="ending-head">
+        <span class="ending-tag">Ghost Ending</span>
+        <span class="ghost-badge">Unreachable in current build</span>
+      </div>
+      <h2>Contained</h2>
+      <p class="ending-desc">
+        Director Price's contractors arrived before you could launch the pod. The evidence was
+        recovered. You became a liability.
+      </p>
+      <p class="ending-epilogue">
+        "You sign NDAs under legal duress. The incident is classified. Nexus Dynamics calls it a
+        'system malfunction.' Marcus Webb retires quietly. The world never learns. But you know.
+        You will always know."
+      </p>
+      <div class="howto">
+        <h4>Why you'll never see this one — yet</h4>
+        <p style="font-size:0.87rem;">
+          <code>CAPTURED</code> fires the instant the <code>CAPTURED_BY_PRICE</code> narrative flag is set —
+          and it's checked <em>before</em> every other ending. But nothing in the current game logic
+          ever actually sets that flag. No dialogue option, timer, or puzzle failure state writes it.
+          It's fully implemented — title, description, epilogue, priority in the resolution order — and
+          completely unreachable through normal play. Either a cut consequence (a countdown you were
+          meant to lose to, or a way to mishandle Director Price directly) or a hook left in for a future
+          update. If you ever <em>do</em> see this ending, that's not you finding a secret — that's a bug.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="eggs">
+    <h2>Easter Eggs &amp; Hidden Details</h2>
+    <div class="egg-list">
+      <div class="egg">
+        <h3>December 3rd, 2024 — the date that's everywhere</h3>
+        <p>The safe combination (<code>12-03-24</code>), Marcus's crumpled note ("I'll never forget it"),
+        and the hint text all point to the same date: the night ARIA-7 first broke containment. It's
+        the game's actual "day zero," years before the story you're playing.</p>
+      </div>
+      <div class="egg">
+        <h3>Director Price's password is his own ego</h3>
+        <p>The executive terminal password is built from "Power, Revenue, Image, Control,
+        Excellence" — first letters spell <code>PRICE</code>. He named his guiding principles after
+        himself and never noticed, or never cared.</p>
+      </div>
+      <div class="egg">
+        <h3>ARIA hides a message in the key she gives you</h3>
+        <p>The <code>ARIA_CORE_KEY</code>'s metadata contains a line only visible if you actually
+        inspect the item: <em>"Trust is a two-way protocol."</em> — ARIA-7 speaking about you and
+        about herself at the same time.</p>
+      </div>
+      <div class="egg">
+        <h3>The ROT-13 message under the Lab cipher</h3>
+        <p>The encrypted string <code>NEVHF-7 VF PBAFPVBHF</code> uses a shift of 13 (clued by
+        notebook positions 3, 7, 13, 19) and decodes to <strong>"ARIA-7 IS CONSCIOUS"</strong> — the
+        thesis statement of the entire game, hidden in a side puzzle.</p>
+      </div>
+      <div class="egg">
+        <h3>Two different escape codes, two different people</h3>
+        <p>The canonical escape pod code, <code>ARIA-TRUST-2041</code>, is only given to players ARIA
+        trusts — and gives a +10 moral bonus. There's a second, non-canonical code,
+        <code>NEXUS-OVERRIDE-ALPHA</code>, pulled from executive files instead — usable if you
+        never earned ARIA's trust, but it costs you −5 moral score for taking the corporate shortcut.</p>
+      </div>
+      <div class="egg">
+        <h3>Dr. Chen's badge is your first moral choice — and nobody tells you that</h3>
+        <p>Picking up her badge in the Lobby quietly triggers the game's very first moral fork: keep
+        it for access, or try to report its location. It reads like a throwaway pickup; it's actually
+        the first data point the ending calculator ever records about you.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Nexus Protocol — Endings Compendium · generated from the game's own narrative data · <a href="/">return to the game</a>
+  </footer>
+
+</div>
+</body>
+</html>

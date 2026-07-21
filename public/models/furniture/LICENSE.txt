@@ -1,0 +1,53 @@
+Furniture Kit (2.0) by Kenney (www.kenney.nl)
+
+License: Creative Commons Zero (CC0) — http://creativecommons.org/publicdomain/zero/1.0/
+Free to use in personal, educational, and commercial projects. Attribution is
+appreciated but not required.
+
+Models used from this pack: desk.glb, computerScreen.glb, computerKeyboard.glb,
+computerMouse.glb, kitchenCoffeeMachine.glb, chairDesk.glb
+
+---
+
+Space Station Kit by Kenney (www.kenney.nl)
+
+License: Creative Commons Zero (CC0) — http://creativecommons.org/publicdomain/zero/1.0/
+Same terms as above.
+
+Models used from this pack: elevatorDoor.glb (originally "door-double-closed.glb")
+
+---
+
+"Safe" by CreativeTrio, via poly.pizza
+
+License: Creative Commons Zero (CC0) — http://creativecommons.org/publicdomain/zero/1.0/
+
+Models used: securitySafe.glb (originally "Safe.glb")
+
+---
+
+"Drone with Orb" by Adam Marc Williams, via poly.pizza
+
+License: Creative Commons Attribution (CC-BY) — https://creativecommons.org/licenses/by/4.0/
+Attribution required: "Drone with Orb" by Adam Marc Williams.
+
+Models used: marcusRobot.glb (originally "Drone with Orb.glb")
+
+Note: this is a static (non-rigged) low-poly asset used as a stand-in for a
+"floating AI robot" look, not a reproduction of any copyrighted character
+design (e.g. Valve's GLaDOS, which was the stylistic reference requested but
+is not itself freely licensed). An earlier rigged/skinned model ("Robot Enemy
+Flying" by Quaternius) was swapped out after its skeleton failed to render
+correctly once it started following the player — this static model avoids
+that whole class of skinned-mesh cloning issues.
+
+---
+
+"Blocks Lab Equipment" by Don Carson, via poly.pizza
+
+License: Creative Commons Attribution (CC-BY) — https://creativecommons.org/licenses/by/4.0/
+Attribution required: "Blocks Lab Equipment" by Don Carson.
+
+Models used: labEquipment.glb (originally "Blocks Lab Equipment.glb") — a
+multi-piece lab equipment cluster (beakers, flasks, and other apparatus)
+used as the "research tools" on the RESEARCH_LAB workstation.
