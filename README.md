@@ -46,7 +46,7 @@ rest) — or copy `.env.example` to `.env.local` and fill in the values by hand:
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | Yes | Postgres connection string (Neon or compatible). If using Neon, use the **pooled** connection string (hostname contains `-pooler`) — the app's runtime queries go through it. |
-| `DIRECT_URL` | Yes (if using Neon) | The **unpooled** connection string — Prisma migrations (`db:push`, `db:migrate`) need a direct connection, since PgBouncer's transaction-pooling mode doesn't support the prepared statements migrations use. Not needed for a plain (non-Neon) Postgres instance. |
+| `DIRECT_URL` | Yes | The **unpooled** connection string — required by `prisma/schema.prisma` even without Neon (Prisma errors out if it's unset). Prisma migrations (`db:push`, `db:migrate`) need a direct connection, since PgBouncer's transaction-pooling mode doesn't support the prepared statements migrations use. If you're not using Neon (no pooler in front of your database), just set this to the same value as `DATABASE_URL`. |
 | `JWT_SECRET` | Yes | Any long random string (32+ chars) — signs the auth session cookie. |
 | `JWT_EXPIRES_IN` | No | Defaults are handled in code if omitted; example uses `7d`. |
 | `GROQ_API_KEY` | Yes | From [console.groq.com](https://console.groq.com). Without this, NPC dialogue, hints, and dynamic narrative text will fail. |
