@@ -20,6 +20,23 @@ There is no separate backend process — Next.js's own API routes (`src/app/api/
 - **A Groq API key** (free tier is sufficient for development).
 - **Git** — optional, but recommended for tracking changes (see "Restore points" below).
 
+## Getting a database URL and a Groq API key
+
+Both are free, and you'll need them before running `npm run setup` (or the
+`.bat` on Windows) or filling in `.env.local` by hand.
+
+**Neon (Postgres database) → `DATABASE_URL` / `DIRECT_URL`**
+1. Go to [neon.com](https://neon.com) and sign up (GitHub, Google, or email).
+2. Create a project — Neon provisions a Postgres database for you automatically, no setup needed.
+3. On the project dashboard, click **Connect**.
+4. The "Connect to your database" modal shows a **pooled** connection string by default (hostname contains `-pooler`) — copy it for `DATABASE_URL`.
+5. In the same modal, toggle **Connection pooling** off to reveal the **direct** connection string — copy it for `DIRECT_URL`.
+
+**Groq (powers the AI NPCs/hints) → `GROQ_API_KEY`**
+1. Go to [console.groq.com](https://console.groq.com) and sign up or log in.
+2. Open the [API Keys page](https://console.groq.com/keys).
+3. Click **Create API Key**, give it any name, and copy the value shown — it starts with `gsk_` and is only displayed once.
+
 ## Environment variables
 
 Run `npm run setup` for an interactive prompt that writes `.env.local` for you
