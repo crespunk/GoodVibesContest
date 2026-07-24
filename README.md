@@ -44,7 +44,20 @@ npm run db:push       # sync the Prisma schema to your database
 npm run dev            # start the dev server at http://localhost:3000
 ```
 
-On Windows, you can also just double-click **`Play Nexus Protocol`** (the shortcut with the cyan hexagon icon) in this folder — it starts the dev server if it isn't already running and opens the game in your browser once it's ready. That shortcut just wraps `start-nexus-protocol.bat`, kept alongside it.
+On Windows, you can skip all three commands above and just double-click
+**`start-nexus-protocol.bat`** in this folder — on first run it installs
+dependencies, creates `.env.local` from `.env.example` and opens it in Notepad
+for you to fill in, runs `db:push` once you've saved it, then starts the dev
+server and opens the game in your browser. Later runs just start the server
+and open the browser.
+
+The **`Play Nexus Protocol`** shortcut (cyan hexagon icon) wraps that same
+`.bat` file. Windows shortcuts store an absolute path, so a shortcut cloned
+from GitHub still points at the original machine's folder and won't work
+until it's repaired — `start-nexus-protocol.bat` does this automatically the
+first time it runs. **So the first time, double-click `start-nexus-protocol.bat`
+itself, not the shortcut**; after that, the shortcut will point at your own
+clone and both work interchangeably.
 
 ## Other useful scripts
 
