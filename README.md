@@ -22,7 +22,9 @@ There is no separate backend process — Next.js's own API routes (`src/app/api/
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` and fill in the values:
+Run `npm run setup` for an interactive prompt that writes `.env.local` for you
+(it only asks for `DATABASE_URL` and `GROQ_API_KEY`, and derives/generates the
+rest) — or copy `.env.example` to `.env.local` and fill in the values by hand:
 
 | Variable | Required | Notes |
 |---|---|---|
@@ -44,12 +46,15 @@ npm run db:push       # sync the Prisma schema to your database
 npm run dev            # start the dev server at http://localhost:3000
 ```
 
-On Windows, you can skip all three commands above and just double-click
-**`start-nexus-protocol.bat`** in this folder — on first run it installs
-dependencies, creates `.env.local` from `.env.example` and opens it in Notepad
-for you to fill in, runs `db:push` once you've saved it, then starts the dev
+On Windows, you can skip all three commands above (and the environment
+variable setup below) and just double-click **`start-nexus-protocol.bat`** in
+this folder. On first run it installs dependencies, then asks you to paste in
+your `DATABASE_URL` and `GROQ_API_KEY` (deriving `DIRECT_URL` and generating
+`JWT_SECRET` for you), writes `.env.local`, runs `db:push`, and starts the dev
 server and opens the game in your browser. Later runs just start the server
-and open the browser.
+and open the browser. Cross-platform, `npm run setup` runs the same
+interactive prompt on its own (Mac/Linux/manual use) if you'd rather not edit
+`.env.local` by hand.
 
 The **`Play Nexus Protocol`** shortcut (cyan hexagon icon) wraps that same
 `.bat` file. Windows shortcuts store an absolute path, so a shortcut cloned

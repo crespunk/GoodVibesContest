@@ -4,6 +4,7 @@
   "description": "AI-powered immersive escape room web application",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup-env.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

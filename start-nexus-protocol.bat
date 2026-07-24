@@ -21,18 +21,37 @@ if not exist "node_modules" (
 )
 
 REM --- Local environment file ---
-if not exist ".env.local" (
-    set "FIRST_SETUP=1"
-    copy /y ".env.example" ".env.local" >nul
-    echo.
-    echo Created .env.local from .env.example.
-    echo Fill in DATABASE_URL, DIRECT_URL, JWT_SECRET, and GROQ_API_KEY
-    echo ^(see README.md for where to get each one^), then save and close Notepad.
-    echo.
-    notepad ".env.local"
-    echo Press any key once you've saved .env.local to continue...
-    pause >nul
+if exist ".env.local" goto skip_env_setup
+
+set "FIRST_SETUP=1"
+echo.
+echo Nexus Protocol setup. You'll need two things - both free:
+echo   1. A Postgres database - https://neon.tech (create a project, copy the
+echo      "Pooled connection" string from the dashboard)
+echo   2. A Groq API key - https://console.groq.com/keys
+echo.
+set /p "DATABASE_URL=Paste your DATABASE_URL (pooled connection string): "
+set "SUGGESTED_DIRECT_URL=%DATABASE_URL:-pooler=%"
+set "DIRECT_URL="
+set /p "DIRECT_URL=Paste DIRECT_URL (unpooled - press Enter to use %SUGGESTED_DIRECT_URL%): "
+if "%DIRECT_URL%"=="" set "DIRECT_URL=%SUGGESTED_DIRECT_URL%"
+set /p "GROQ_API_KEY=Paste your GROQ_API_KEY (starts with gsk_): "
+
+call node scripts\setup-env.mjs
+if errorlevel 1 (
+    set "DATABASE_URL="
+    set "DIRECT_URL="
+    set "GROQ_API_KEY="
+    echo Setup failed - see the errors above.
+    pause
+    exit /b 1
 )
+set "DATABASE_URL="
+set "DIRECT_URL="
+set "GROQ_API_KEY="
+set "SUGGESTED_DIRECT_URL="
+
+:skip_env_setup
 
 REM --- Database schema (only needed once, right after .env.local is first filled in) ---
 if "%FIRST_SETUP%"=="1" (
