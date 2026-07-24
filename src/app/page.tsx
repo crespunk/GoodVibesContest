@@ -234,7 +234,7 @@ export default function LandingPage() {
           {[
             { icon: "🤖", label: "AI NPCs", sub: "Never scripted" },
             { icon: "🧩", label: "10 Puzzles", sub: "Multiple solutions" },
-            { icon: "🔮", label: "4 Endings", sub: "Your choices matter" },
+            { icon: "🔮", label: "5 Endings", sub: "Your choices matter" },
           ].map(({ icon, label, sub }) => (
             <div key={label}>
               <div className="text-2xl mb-1">{icon}</div>

@@ -26,7 +26,8 @@ Copy `.env.example` to `.env.local` and fill in the values:
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | Yes | Postgres connection string (Neon or compatible). |
+| `DATABASE_URL` | Yes | Postgres connection string (Neon or compatible). If using Neon, use the **pooled** connection string (hostname contains `-pooler`) — the app's runtime queries go through it. |
+| `DIRECT_URL` | Yes (if using Neon) | The **unpooled** connection string — Prisma migrations (`db:push`, `db:migrate`) need a direct connection, since PgBouncer's transaction-pooling mode doesn't support the prepared statements migrations use. Not needed for a plain (non-Neon) Postgres instance. |
 | `JWT_SECRET` | Yes | Any long random string (32+ chars) — signs the auth session cookie. |
 | `JWT_EXPIRES_IN` | No | Defaults are handled in code if omitted; example uses `7d`. |
 | `GROQ_API_KEY` | Yes | From [console.groq.com](https://console.groq.com). Without this, NPC dialogue, hints, and dynamic narrative text will fail. |
@@ -51,6 +52,23 @@ On Windows, you can also just double-click **`Play Nexus Protocol`** (the shortc
 - `npm run lint` — ESLint.
 - `npm run db:studio` — Prisma Studio (browse/edit the database visually).
 - `npm run db:migrate` — create/apply a Prisma migration (use instead of `db:push` once you want tracked migrations).
+
+## Troubleshooting
+
+**`terminating connection due to administrator command` (Postgres error `57P01`)**
+
+This shows up in the Prisma logs when the underlying Postgres connection gets killed out
+from under an in-flight query. On Neon specifically, this almost always means the compute
+endpoint **auto-suspended** (Neon scales to zero after a period of inactivity on the free/dev
+tier) or was restarted from the Neon console — it's not an application bug. It's most likely
+to happen on a **direct** (non-pooled) connection, since those aren't designed to survive the
+underlying compute cycling.
+
+Fix: make sure `DATABASE_URL` points at Neon's **pooled** endpoint (hostname has `-pooler` in
+it, from the Neon dashboard's "Pooled connection" toggle) with `?pgbouncer=true&connection_limit=1`,
+and set `DIRECT_URL` to the unpooled connection string for migrations — see the Environment
+variables table above. The pooler reconnects transparently across suspend/resume cycles instead
+of handing your app a dead connection.
 
 ## Restore points
 

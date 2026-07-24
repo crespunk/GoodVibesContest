@@ -2866,7 +2866,12 @@ export function GameWorld3D() {
       <Canvas
         camera={{ fov: 80, near: 0.1, far: 60, position: [0, PLAYER_H, 5] }}
         gl={{ antialias: true }}
-        shadows={shadowsEnabled}
+        // A bare boolean here makes r3f request THREE.PCFSoftShadowMap, which
+        // three.js (0.185+) has deprecated in favor of PCFShadowMap — it still
+        // works but logs a console warning every load. Ask for "percentage"
+        // (PCFShadowMap) explicitly instead; it's the exact type three was
+        // already silently falling back to, so this is a no-op visually.
+        shadows={shadowsEnabled ? "percentage" : false}
         onCreated={({ gl }) => { gl.setPixelRatio(Math.min(window.devicePixelRatio, 2)); }}
         onPointerDown={() => { if (!isLocked) lockPointer(); }}
       >
